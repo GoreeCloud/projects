@@ -56,7 +56,7 @@ const defaultFromData: TFormData = {
   email: "",
   company_name: "",
   password: "",
-  is_telemetry_enabled: true,
+  is_telemetry_enabled: false,
 };
 
 export function InstanceSetupForm() {
@@ -66,9 +66,7 @@ export function InstanceSetupForm() {
   const lastNameParam = searchParams?.get("last_name") || undefined;
   const companyParam = searchParams?.get("company") || undefined;
   const emailParam = searchParams?.get("email") || undefined;
-  // only set when the API redirects back after a failed setup; otherwise the default (enabled) applies
-  const telemetryParam = searchParams?.get("is_telemetry_enabled");
-  const isTelemetryEnabledParam = telemetryParam ? telemetryParam === "True" : undefined;
+  // Failed setup redirects must not restore telemetry consent from a URL parameter.
   const errorCode = searchParams?.get("error_code") || undefined;
   const errorMessage = searchParams?.get("error_message") || undefined;
   // state
@@ -93,9 +91,7 @@ export function InstanceSetupForm() {
     if (lastNameParam) setFormData((prev) => ({ ...prev, last_name: lastNameParam }));
     if (companyParam) setFormData((prev) => ({ ...prev, company_name: companyParam }));
     if (emailParam) setFormData((prev) => ({ ...prev, email: emailParam }));
-    if (isTelemetryEnabledParam !== undefined)
-      setFormData((prev) => ({ ...prev, is_telemetry_enabled: isTelemetryEnabledParam }));
-  }, [firstNameParam, lastNameParam, companyParam, emailParam, isTelemetryEnabledParam]);
+  }, [firstNameParam, lastNameParam, companyParam, emailParam]);
 
   // derived values
   const errorData: TError = useMemo(() => {
