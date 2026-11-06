@@ -3,7 +3,7 @@
 # See the LICENSE file for details.
 
 # Django imports
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, F, OuterRef
 
 # Third Party imports
 from rest_framework.response import Response
@@ -66,7 +66,15 @@ class ProjectMembersEndpoint(BaseAPIView):
     permission_classes = [AllowAny]
 
     def get(self, request, anchor):
-        deploy_board = DeployBoard.objects.filter(anchor=anchor).first()
+        # A public member directory is valid only for an enabled, non-deleted
+        # project board. Anchors for other entity types must not expose members.
+        deploy_board = DeployBoard.objects.filter(
+            anchor=anchor,
+            entity_name="project",
+            entity_identifier=F("project_id"),
+            is_disabled=False,
+            deleted_at__isnull=True,
+        ).first()
         if not deploy_board:
             return Response(
                 {"error": "Invalid anchor"},
