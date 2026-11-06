@@ -84,6 +84,27 @@ These are isolated DRF-dispatch and synthetic ORM tests, **not** the full
 Plane Django application on PostgreSQL, its actual URL router, reverse proxy,
 or a deployed publication/revocation test.
 
+## Full-application PostgreSQL contract tests (prepared, not executed)
+
+`apps/api/plane/tests/contract/app/test_public_board_publication_boundary_app.py`
+adds **9 intended test cases** to the project's existing `pytest-django`
+suite, using real `plane.db.models`, Django URL routing, DRF middleware,
+and the application's `session_client` and `workspace` fixtures.
+They cover disabled, deleted, parent-deleted, cross-workspace and anonymous
+access to published project-board routes, plus next-request revocation.
+
+The file was compiled, AST-inspected, and read back successfully in a clean,
+detached source worktree; its tests were **NOT run**. The authorized laptop
+has no PostgreSQL test server and its existing minimal isolated environment
+does not contain the full Plane application dependencies. **Do not include
+these nine cases in any passing isolated-suite test count.**
+
+For a future authorized isolated Plane/PostgreSQL test environment, run this
+target file under the existing `apps/api/pytest.ini` and
+`plane.settings.test` configuration with only disposable test data, no
+production credentials, and blocked outbound network access. Compare failures
+against the source baseline and test permissions before accepting the PR.
+
 ## Dependencies, risk, and release gates
 
 1. Inventory every public URL backed by `BaseAPIView` and `BaseViewSet`;
