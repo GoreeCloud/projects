@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:goreecloud:projects:work-item-reference:v1",
+  "title": "GoreeCloud Projects read-only work-item reference v1",
+  "description": "Untrusted locator only. This record is not an access grant, invitation, capability token, or synced task record. Both the recipient system and the Projects resolver must authorize every request.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "entity_type",
+    "workspace_id",
+    "project_id",
+    "work_item_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "source": {
+      "const": "goreecloud-projects"
+    },
+    "entity_type": {
+      "const": "work_item"
+    },
+    "workspace_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "project_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "work_item_id": {
+      "$ref": "#/$defs/uuid"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
+  }
+}

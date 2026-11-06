@@ -11,6 +11,16 @@ items currently belong to Plane's own database; no cross-product sync exists.
 status/scheduling record after a versioned API, authorization and migration exist.
 Do not claim the currently device-local Tasks clients are an active shared service.
 
+## First staged deliverable — reference contract only
+
+A [versioned, read-only work-item reference v1](GOREECLOUD-READONLY-WORK-ITEM-LINK-V1.md)
+has a strict JSON Schema, dependency-free parser, and isolated input-validation
+tests. It stores opaque Projects workspace/project/work-item UUIDs without a URL,
+access token or copied work-item details. **No Teams API route, shared identity,
+authorization resolver, navigation hook or task sync has been implemented.**
+Link creation/read must remain disabled until independently authorized on
+both products, with per-view membership and revocation checks.
+
 ## Safe staged integration
 
 1. Link issue URLs/IDs in authorized Teams conversations without copying records.
