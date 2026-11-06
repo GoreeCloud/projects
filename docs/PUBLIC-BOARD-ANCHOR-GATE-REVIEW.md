@@ -56,7 +56,7 @@ The added structural test detects newly introduced unanchored public routes.
   soft-deleted, or mismatched anchors are denied.
 - It also verifies non-anchor routes continue without board lookup.
 - `python3 -m unittest discover -s tests -p 'test_public_board*.py' -v`:
-  **10 passing tests** on a detached branch checkout; Python syntax compilation
+  **11 passing tests** on a detached branch checkout; Python syntax compilation
   passed and the test worktree was clean.
 
 A second isolated test compiles the actual mixin method and executes its
@@ -71,11 +71,14 @@ An additional two tests instantiate a synthetic `APIView` with the actual
 3.18.3** `APIRequestFactory`, and verify that a valid board returns HTTP
 200 while missing, disabled, deleted, non-project and mismatched boards return
 HTTP 404, including soft-deleted parent entities and cross-workspace
-board records. They execute on synthetic Django 5.2.17 SQLite rows without
+board records. A further test confirms that publication changes are checked
+on every request: disabling a previously available board changes its next
+response from 200 to 404; soft-deleting its project also denies the next
+request. They execute on synthetic Django 5.2.17 SQLite rows without
 production user/session models or an external exporter.
 
 The combined local-only integration of draft PRs #3, #5, #7, #8, #10 and #11
-passed **21/21 focused tests** and `uv lock --check` in a clean worktree.
+passed **22/22 focused tests** and `uv lock --check` in a clean worktree.
 
 These are isolated DRF-dispatch and synthetic ORM tests, **not** the full
 Plane Django application on PostgreSQL, its actual URL router, reverse proxy,
