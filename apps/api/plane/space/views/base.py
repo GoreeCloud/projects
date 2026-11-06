@@ -60,6 +60,9 @@ class DeployBoardAnchorMixin:
             entity_name="project",
             is_disabled=False,
             deleted_at__isnull=True,
+            project__deleted_at__isnull=True,
+            workspace__deleted_at__isnull=True,
+            project__workspace_id=F("workspace_id"),
             entity_identifier=F("project_id"),
         ).exists():
             raise NotFound()
