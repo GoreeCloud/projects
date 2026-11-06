@@ -23,6 +23,15 @@ one matching project board with:
 If the board does not pass, `NotFound` is raised **before the handler runs**.
 Routes without an `anchor` kwarg are left unchanged.
 
+## Static URL coverage evidence
+
+A read-only Python AST inventory of `apps/api/plane/space/urls/*.py`
+identified **23 routes** containing `<str:anchor>`; all **23 handlers**
+directly inherit `BaseAPIView` or `BaseViewSet`, which themselves include
+`DeployBoardAnchorMixin`. `tests/test_public_board_route_coverage.py`
+asserts this relationship and catches future handlers that bypass these
+two base classes. It does not test Django URL dispatch or database behavior.
+
 ## Test evidence
 
 - The isolated test extracts and executes the **actual mixin code** with a
@@ -30,8 +39,8 @@ Routes without an `anchor` kwarg are left unchanged.
 - The fixture asserts valid boards pass, and missing, wrong-type, disabled,
   soft-deleted, or mismatched anchors are denied.
 - It also verifies non-anchor routes continue without board lookup.
-- `python3 -m unittest discover -s tests -p 'test_public_board_anchor_gate.py' -v`:
-  **3 passing tests** on a detached branch checkout; Python syntax compilation
+- `python3 -m unittest discover -s tests -p 'test_public_board_*.py' -v`:
+  **5 passing tests** on a detached branch checkout; Python syntax compilation
   passed and the test worktree was clean.
 
 These are source-level logic tests, **not** a Django or PostgreSQL HTTP test.
