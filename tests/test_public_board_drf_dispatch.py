@@ -42,6 +42,25 @@ class PublicBoardDRFDispatchTests(unittest.TestCase):
         from rest_framework.views import APIView
 
         cls.connection = connection
+        cls.Workspace = type("SyntheticDRFWorkspace", (models.Model,), {
+            "__module__": __name__,
+            "id": models.UUIDField(primary_key=True, default=uuid4),
+            "deleted_at": models.DateTimeField(null=True),
+            "Meta": type("Meta", (), {
+                "app_label": "gc_public_board_drf_test",
+                "db_table": "gc_drf_workspace_smoke_only",
+            }),
+        })
+        cls.Project = type("SyntheticDRFProject", (models.Model,), {
+            "__module__": __name__,
+            "id": models.UUIDField(primary_key=True, default=uuid4),
+            "workspace": models.ForeignKey(cls.Workspace, on_delete=models.CASCADE),
+            "deleted_at": models.DateTimeField(null=True),
+            "Meta": type("Meta", (), {
+                "app_label": "gc_public_board_drf_test",
+                "db_table": "gc_drf_project_smoke_only",
+            }),
+        })
         cls.Board = type(
             "SyntheticDRFPublicBoard",
             (models.Model,),
@@ -49,7 +68,8 @@ class PublicBoardDRFDispatchTests(unittest.TestCase):
                 "__module__": __name__,
                 "anchor": models.CharField(max_length=255, unique=True),
                 "entity_name": models.CharField(max_length=30),
-                "project_id": models.UUIDField(),
+                "project": models.ForeignKey(cls.Project, on_delete=models.CASCADE),
+                "workspace": models.ForeignKey(cls.Workspace, on_delete=models.CASCADE),
                 "entity_identifier": models.UUIDField(),
                 "deleted_at": models.DateTimeField(null=True),
                 "is_disabled": models.BooleanField(default=False),
@@ -60,7 +80,8 @@ class PublicBoardDRFDispatchTests(unittest.TestCase):
             },
         )
         with connection.schema_editor() as editor:
-            editor.create_model(cls.Board)
+            for model in (cls.Workspace, cls.Project, cls.Board):
+                editor.create_model(model)
 
         tree = ast.parse(SOURCE.read_text())
         original = next(node for node in tree.body if isinstance(node, ast.ClassDef)
@@ -96,20 +117,25 @@ class PublicBoardDRFDispatchTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         with cls.connection.schema_editor() as editor:
-            editor.delete_model(cls.Board)
+            for model in (cls.Board, cls.Project, cls.Workspace):
+                editor.delete_model(model)
 
     def tearDown(self):
         self.Board.objects.all().delete()
+        self.Project.objects.all().delete()
+        self.Workspace.objects.all().delete()
 
     def request_board(self, anchor):
         request = self.request_factory.get("/anchor/" + anchor + "/meta/")
         return self.Probe.as_view()(request, anchor=anchor)
 
     def test_enabled_project_board_returns_http_200(self):
-        project = uuid4()
+        workspace = self.Workspace.objects.create()
+        project = self.Project.objects.create(workspace=workspace)
         self.Board.objects.create(
             anchor="published", entity_name="project",
-            project_id=project, entity_identifier=project,
+            project=project, workspace=workspace,
+            entity_identifier=project.pk,
             is_disabled=False, deleted_at=None,
         )
         response = self.request_board("published")
@@ -118,23 +144,39 @@ class PublicBoardDRFDispatchTests(unittest.TestCase):
 
     def test_revoked_and_invalid_boards_return_http_404(self):
         from django.utils import timezone
-        for overrides in (
-            None,
-            {"is_disabled": True},
-            {"deleted_at": timezone.now()},
-            {"entity_name": "module"},
-            {"entity_identifier": uuid4()},
-        ):
-            with self.subTest(overrides=overrides):
-                self.Board.objects.all().delete()
-                if overrides is not None:
-                    project = uuid4()
+        cases = (
+            "missing", "disabled", "deleted_board", "non_project",
+            "identity_mismatch", "deleted_project", "deleted_workspace",
+            "cross_workspace",
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                self.tearDown()
+                if case != "missing":
+                    workspace = self.Workspace.objects.create()
+                    project = self.Project.objects.create(workspace=workspace)
                     fields = {
                         "anchor": "published", "entity_name": "project",
-                        "project_id": project, "entity_identifier": project,
+                        "project": project, "workspace": workspace,
+                        "entity_identifier": project.pk,
                         "is_disabled": False, "deleted_at": None,
                     }
-                    fields.update(overrides)
+                    if case == "disabled":
+                        fields["is_disabled"] = True
+                    elif case == "deleted_board":
+                        fields["deleted_at"] = timezone.now()
+                    elif case == "non_project":
+                        fields["entity_name"] = "module"
+                    elif case == "identity_mismatch":
+                        fields["entity_identifier"] = uuid4()
+                    elif case == "deleted_project":
+                        project.deleted_at = timezone.now()
+                        project.save(update_fields=["deleted_at"])
+                    elif case == "deleted_workspace":
+                        workspace.deleted_at = timezone.now()
+                        workspace.save(update_fields=["deleted_at"])
+                    elif case == "cross_workspace":
+                        fields["workspace"] = self.Workspace.objects.create()
                     self.Board.objects.create(**fields)
                 response = self.request_board("published")
                 self.assertEqual(response.status_code, 404)
