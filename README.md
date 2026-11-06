@@ -56,7 +56,7 @@ The 10 upstream Actions workflows were relocated outside active workflow paths
 to [docs/upstream-github-workflows](docs/upstream-github-workflows), pending review.
 No automatic imported workflow is enabled.
 
-### Upstream release lookup privacy (draft PR #13)
+### Upstream release lookup privacy
 
 During instance registration, the inherited Plane version checker originally
 contacted the Plane GitHub releases API even when metrics telemetry was off.
