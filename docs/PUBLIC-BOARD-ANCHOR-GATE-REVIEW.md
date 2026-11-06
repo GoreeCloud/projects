@@ -39,11 +39,18 @@ two base classes. It does not test Django URL dispatch or database behavior.
 - The fixture asserts valid boards pass, and missing, wrong-type, disabled,
   soft-deleted, or mismatched anchors are denied.
 - It also verifies non-anchor routes continue without board lookup.
-- `python3 -m unittest discover -s tests -p 'test_public_board_*.py' -v`:
-  **5 passing tests** on a detached branch checkout; Python syntax compilation
+- `python3 -m unittest discover -s tests -p 'test_public_board*.py' -v`:
+  **7 passing tests** on a detached branch checkout; Python syntax compilation
   passed and the test worktree was clean.
 
-These are source-level logic tests, **not** a Django or PostgreSQL HTTP test.
+A second isolated test compiles the actual mixin method and executes its
+`F("project_id")`, `deleted_at IS NULL` and `is_disabled=False` filters
+against a real **Django 5.2.17 ORM**, with synthetic project-board rows in a
+private **in-memory SQLite database**. Valid and invalid examples passed.
+No Plane models, services, credentials or real data are loaded.
+
+These are source-level and synthetic ORM tests, **not** a full Plane Django
+or PostgreSQL HTTP acceptance test.
 
 ## Dependencies, risk, and release gates
 
