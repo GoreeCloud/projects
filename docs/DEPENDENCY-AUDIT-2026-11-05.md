@@ -21,6 +21,56 @@ Only `pnpm-workspace.yaml` and its generated `pnpm-lock.yaml` were changed for d
 
 A second read-only `pnpm audit --json` reported **1 moderate advisory, 0 high, 0 critical, 0 low**, down from 9 total. The remaining finding is `minimatch` 10.2.3, `GHSA-g3hv-75wg-m249`, which reports a patched range beginning at 11.0.1. The existing `minimatch@10` exact override is retained until the major-version compatibility of developer tooling is validated. It has **not** been suppressed.
 
+## Unmerged minimatch v11 compatibility preflight (November 5, 2026)
+
+The existing `minimatch@10: 10.2.3` override and **this PR's lockfile remain unchanged**.
+The project's current import has no direct `minimatch` source imports in a
+bounded tracked-source scan; the staged 11.0.1 lockfile candidate resolves
+three transitive consumers: `@eslint/config-array@0.23.5`, `eslint@10.4.1`,
+and `deslop-js@0.0.21`. This does not prove that all developer tooling is
+compatible across a major version.
+
+Read-only review of a **previously created isolated candidate** found that
+replacing the `minimatch@10` override with `11.0.1` changes the generated
+lockfile's `minimatch` entry and introduces `@isaacs/nonrecursive-glob-match@1.0.3`.
+The saved candidate audit artifact reports **zero advisories**, but this is
+**not** a fresh audit of the checked-in PR or a verified install/build.
+Review the new package's license/notice obligations separately.
+
+In an existing installation fixture (no fresh installation), under Node
+24's `--permission` mode with only fixture-directory read access and no
+network permissions:
+
+- The actual `minimatch@11.0.1` named exports and **five ordinary** glob
+  patterns passed bounded smoke checks.
+- An isolated `ESLint@10.4.1` test using ordinary `**/*.js` config matching
+  returned zero errors for a valid source string and exactly one for an invalid
+  one. This exercises one consumer, **not** a complete project lint run.
+- The attempt to import the `deslop-js` consumer while restricting native
+  addons stopped at its unrelated `oxc-parser` native binding with
+  `ERR_DLOPEN_DISABLED`. Do not relax this sandbox limit solely to claim a
+  passing compatibility test. That consumer and the full project remain
+  **untested**.
+- Upstream minimatch v11 removes `Minimatch.makeRe()`, the `regexp`
+  property, and several implementation methods. A bounded source scan of
+  these three transitive consumers found references to the exported
+  `Minimatch` class or `minimatch()` function, not those removed APIs.
+  This is static evidence, not a blanket compatibility guarantee.
+
+**New toolchain blocker:** The laptop's ordinary `pnpm --version` currently
+fails because its Corepack shim selects a missing cached 11.28.6 entry,
+although an intact project-pinned 11.10.0 cache exists. The global shim was
+**not** modified. Before another candidate upgrade or install, repair the
+pinning/reproducibility path through authorized, verified maintenance; do
+not silently substitute a different package manager.
+
+**Decision:** Keep this PR at the existing verified **one moderate finding**.
+Do not assert that the `minimatch` advisory is remediated in the repository.
+Remaining gates are the resolved-graph license review, offline-compatible
+package-manager integrity, `deslop-js` functionality, full source/build/test
+validation, and fresh audit of the exact candidate before separately
+approving the major version change.
+
 ## Unverified and deployment gates
 
 - No application dependencies were installed, built, loaded or executed by this audit. Runtime and test compatibility of the updated graph is **not yet accepted**.
