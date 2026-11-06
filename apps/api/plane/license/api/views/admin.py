@@ -29,6 +29,7 @@ from plane.license.api.serializers import (
     InstanceAdminSerializer,
 )
 from plane.license.models import Instance, InstanceAdmin
+from plane.license.telemetry_consent import telemetry_opt_in
 from plane.db.models import User, Profile
 from plane.utils.cache import cache_response, invalidate_cache
 from plane.authentication.utils.login import user_login
@@ -128,7 +129,8 @@ class InstanceAdminSignUpEndpoint(View):
         first_name = request.POST.get("first_name", False)
         last_name = request.POST.get("last_name", "")
         company_name = request.POST.get("company_name", "")
-        is_telemetry_enabled = request.POST.get("is_telemetry_enabled", True)
+        telemetry_values = request.POST.getlist("is_telemetry_enabled")
+        is_telemetry_enabled = len(telemetry_values) == 1 and telemetry_opt_in(telemetry_values[0])
 
         # return error if the email and password is not present
         if not email or not password or not first_name:
