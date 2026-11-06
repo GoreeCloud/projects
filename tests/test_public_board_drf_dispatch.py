@@ -1,0 +1,145 @@
+# Copyright (c) 2026 GoreeCloud
+# SPDX-License-Identifier: AGPL-3.0-only
+"""HTTP-dispatch smoke tests for the actual shared Plane public-board gate.
+
+Uses DRF APIRequestFactory and a synthetic in-memory SQLite board model.
+It does not import Plane's application services or contact user databases.
+"""
+import ast
+import importlib.util
+from pathlib import Path
+import unittest
+from uuid import uuid4
+
+SOURCE = Path(__file__).resolve().parents[1] / "apps/api/plane/space/views/base.py"
+
+
+@unittest.skipUnless(
+    importlib.util.find_spec("django") is not None
+    and importlib.util.find_spec("rest_framework") is not None,
+    "Django and Django REST Framework required",
+)
+class PublicBoardDRFDispatchTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from django.conf import settings
+        if not settings.configured:
+            settings.configure(
+                INSTALLED_APPS=[],
+                DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}},
+                DEFAULT_AUTO_FIELD="django.db.models.AutoField",
+                SECRET_KEY="synthetic-public-board-test-only",
+                USE_TZ=True,
+                REST_FRAMEWORK={"UNAUTHENTICATED_USER": None},
+            )
+        import django
+        django.setup()
+        from django.db import connection, models
+        from rest_framework.exceptions import NotFound
+        from rest_framework.permissions import AllowAny
+        from rest_framework.response import Response
+        from rest_framework.test import APIRequestFactory
+        from rest_framework.views import APIView
+
+        cls.connection = connection
+        cls.Board = type(
+            "SyntheticDRFPublicBoard",
+            (models.Model,),
+            {
+                "__module__": __name__,
+                "anchor": models.CharField(max_length=255, unique=True),
+                "entity_name": models.CharField(max_length=30),
+                "project_id": models.UUIDField(),
+                "entity_identifier": models.UUIDField(),
+                "deleted_at": models.DateTimeField(null=True),
+                "is_disabled": models.BooleanField(default=False),
+                "Meta": type("Meta", (), {
+                    "app_label": "gc_public_board_drf_test",
+                    "db_table": "gc_drf_public_board_smoke_only",
+                }),
+            },
+        )
+        with connection.schema_editor() as editor:
+            editor.create_model(cls.Board)
+
+        tree = ast.parse(SOURCE.read_text())
+        original = next(node for node in tree.body if isinstance(node, ast.ClassDef)
+                        and node.name == "DeployBoardAnchorMixin")
+        namespace = {
+            "DeployBoard": cls.Board,
+            "F": models.F,
+            "NotFound": NotFound,
+        }
+        module = ast.fix_missing_locations(ast.Module(body=[original], type_ignores=[]))
+        exec(compile(module, str(SOURCE), "exec"), namespace)
+        guard_mixin = namespace["DeployBoardAnchorMixin"]
+
+        def get(self, request, anchor):
+            return Response({"published": True})
+
+        def no_authentication(self, request):
+            # No production login, sessions or user tables are loaded.
+            return None
+
+        cls.Probe = type(
+            "SyntheticPublicBoardHTTPProbe",
+            (guard_mixin, APIView),
+            {
+                "authentication_classes": [],
+                "permission_classes": [AllowAny],
+                "perform_authentication": no_authentication,
+                "get": get,
+            },
+        )
+        cls.request_factory = APIRequestFactory()
+
+    @classmethod
+    def tearDownClass(cls):
+        with cls.connection.schema_editor() as editor:
+            editor.delete_model(cls.Board)
+
+    def tearDown(self):
+        self.Board.objects.all().delete()
+
+    def request_board(self, anchor):
+        request = self.request_factory.get("/anchor/" + anchor + "/meta/")
+        return self.Probe.as_view()(request, anchor=anchor)
+
+    def test_enabled_project_board_returns_http_200(self):
+        project = uuid4()
+        self.Board.objects.create(
+            anchor="published", entity_name="project",
+            project_id=project, entity_identifier=project,
+            is_disabled=False, deleted_at=None,
+        )
+        response = self.request_board("published")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"published": True})
+
+    def test_revoked_and_invalid_boards_return_http_404(self):
+        from django.utils import timezone
+        for overrides in (
+            None,
+            {"is_disabled": True},
+            {"deleted_at": timezone.now()},
+            {"entity_name": "module"},
+            {"entity_identifier": uuid4()},
+        ):
+            with self.subTest(overrides=overrides):
+                self.Board.objects.all().delete()
+                if overrides is not None:
+                    project = uuid4()
+                    fields = {
+                        "anchor": "published", "entity_name": "project",
+                        "project_id": project, "entity_identifier": project,
+                        "is_disabled": False, "deleted_at": None,
+                    }
+                    fields.update(overrides)
+                    self.Board.objects.create(**fields)
+                response = self.request_board("published")
+                self.assertEqual(response.status_code, 404)
+                self.assertNotIn("published", response.data)
+
+
+if __name__ == "__main__":
+    unittest.main()
