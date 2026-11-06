@@ -13,6 +13,8 @@ SOURCE = Path(__file__).resolve().parents[1] / "apps/api/plane/space/views/base.
 REQUIRED = {
     "anchor", "entity_name", "is_disabled",
     "deleted_at__isnull", "entity_identifier",
+    "project__deleted_at__isnull", "workspace__deleted_at__isnull",
+    "project__workspace_id",
 }
 
 
@@ -45,8 +47,9 @@ class FakeBoardManager:
         if board is None:
             return False
         for key, expected in self.latest.items():
-            if key == "deleted_at__isnull":
-                if (board.deleted_at is None) != expected:
+            if key.endswith("__isnull"):
+                field_name = key.removesuffix("__isnull")
+                if (getattr(board, field_name) is None) != expected:
                     return False
             elif isinstance(expected, FieldReference):
                 if getattr(board, key) != getattr(board, expected.name):
@@ -82,6 +85,10 @@ def board(**overrides):
         "deleted_at": None,
         "entity_identifier": "project-id",
         "project_id": "project-id",
+        "workspace_id": "workspace-a",
+        "project__workspace_id": "workspace-a",
+        "project__deleted_at": None,
+        "workspace__deleted_at": None,
     }
     attributes.update(overrides)
     return SimpleNamespace(**attributes)
@@ -108,6 +115,10 @@ class SharedBoardGateTests(unittest.TestCase):
         self.assertEqual(filters["entity_name"], "project")
         self.assertFalse(filters["is_disabled"])
         self.assertTrue(filters["deleted_at__isnull"])
+        self.assertTrue(filters["project__deleted_at__isnull"])
+        self.assertTrue(filters["workspace__deleted_at__isnull"])
+        self.assertIsInstance(filters["project__workspace_id"], FieldReference)
+        self.assertEqual(filters["project__workspace_id"].name, "workspace_id")
         self.assertIsInstance(filters["entity_identifier"], FieldReference)
         self.assertEqual(filters["entity_identifier"].name, "project_id")
 
@@ -119,6 +130,9 @@ class SharedBoardGateTests(unittest.TestCase):
             board(is_disabled=True),
             board(deleted_at="soft-deleted"),
             board(entity_identifier="wrong-id"),
+            board(project__deleted_at="deleted"),
+            board(workspace__deleted_at="deleted"),
+            board(project__workspace_id="other-workspace"),
         ]
         for record in examples:
             with self.subTest(record=record):
