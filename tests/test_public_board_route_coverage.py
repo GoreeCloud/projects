@@ -61,5 +61,29 @@ class PublicAnchorRouteCoverageTests(unittest.TestCase):
                 self.assertIn("DeployBoardAnchorMixin", classes[name])
 
 
+    def test_unanchored_public_routes_are_explicitly_reviewed(self):
+        # The shared guard only applies when a URL supplies an anchor kwarg.
+        # Keep exceptions visible until their separate security issues close.
+        routes = set()
+        for path in (SPACE / "urls").glob("*.py"):
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if (not isinstance(node, ast.Call)
+                        or not isinstance(node.func, ast.Name)
+                        or node.func.id != "path" or len(node.args) < 2):
+                    continue
+                route, handler = node.args[:2]
+                if not isinstance(route, ast.Constant) or "<str:anchor>" in str(route.value):
+                    continue
+                if (isinstance(handler, ast.Call)
+                        and isinstance(handler.func, ast.Attribute)
+                        and handler.func.attr == "as_view"):
+                    routes.add((path.name, route.value))
+        self.assertEqual(routes, {
+            ("project.py", "workspaces/<str:slug>/projects/<uuid:project_id>/anchor/"),
+            ("intake.py", "workspaces/<str:slug>/project-boards/"),
+        }, "Unexpected unanchored public endpoint; review publication and authorization rules")
+
+
 if __name__ == "__main__":
     unittest.main()
