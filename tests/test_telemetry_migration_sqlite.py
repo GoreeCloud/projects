@@ -55,8 +55,9 @@ class TelemetryMigrationTests(unittest.TestCase):
             old_model = old.apps.get_model('license', 'Instance')
             with connection.schema_editor() as editor:
                 editor.create_model(old_model)
-            old_model.objects.using(connection.alias).create(id=1, is_telemetry_enabled=True)
-            old_model.objects.using(connection.alias).create(id=2, is_telemetry_enabled=False)
+            with connection.cursor() as cursor:
+                cursor.execute("INSERT INTO instances (id, is_telemetry_enabled) VALUES (1, 1)")
+                cursor.execute("INSERT INTO instances (id, is_telemetry_enabled) VALUES (2, 0)")
 
             new = old.clone()
             operation.state_forwards('license', new)
@@ -64,21 +65,20 @@ class TelemetryMigrationTests(unittest.TestCase):
                 operation.database_forwards('license', editor, old, new)
             new_model = new.apps.get_model('license', 'Instance')
             self.assertIs(new_model._meta.get_field('is_telemetry_enabled').default, False)
-            self.assertEqual(
-                list(new_model.objects.using(connection.alias).order_by('id').values_list('id', 'is_telemetry_enabled')),
-                [(1, True), (2, False)],
-            )
-            new_model.objects.using(connection.alias).create(id=3)
-            self.assertFalse(new_model.objects.using(connection.alias).get(id=3).is_telemetry_enabled)
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT id, is_telemetry_enabled FROM instances ORDER BY id")
+                self.assertEqual(cursor.fetchall(), [(1, True), (2, False)])
+                value = new_model(id=3).is_telemetry_enabled
+                self.assertIs(value, False)
+                cursor.execute("INSERT INTO instances (id, is_telemetry_enabled) VALUES (3, %s)", [value])
 
             with connection.schema_editor() as editor:
                 operation.database_backwards('license', editor, new, old)
             old_model = old.apps.get_model('license', 'Instance')
             self.assertIs(old_model._meta.get_field('is_telemetry_enabled').default, True)
-            self.assertEqual(
-                list(old_model.objects.using(connection.alias).order_by('id').values_list('id', 'is_telemetry_enabled')),
-                [(1, True), (2, False), (3, False)],
-            )
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT id, is_telemetry_enabled FROM instances ORDER BY id")
+                self.assertEqual(cursor.fetchall(), [(1, True), (2, False), (3, False)])
         finally:
             connection.close()
 
