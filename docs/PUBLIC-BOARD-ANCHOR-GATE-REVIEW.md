@@ -32,6 +32,18 @@ directly inherit `BaseAPIView` or `BaseViewSet`, which themselves include
 asserts this relationship and catches future handlers that bypass these
 two base classes. It does not test Django URL dispatch or database behavior.
 
+The same inventory confirms exactly **two URL patterns without an anchor**:
+
+- `workspaces/<str:slug>/projects/<uuid:project_id>/anchor/` — anonymous
+  anchor/settings lookup; [issue #6](https://github.com/GoreeCloud/projects/issues/6)
+  tracks missing publication-state checks.
+- `workspaces/<str:slug>/project-boards/` — anonymous workspace board listing;
+  [issue #12](https://github.com/GoreeCloud/projects/issues/12) tracks the
+  verified URL/view signature mismatch and invalid queryset access.
+
+The added structural test detects newly introduced unanchored public routes.
+**Neither route is secured by this anchor-mixin change.**
+
 ## Test evidence
 
 - The isolated test extracts and executes the **actual mixin code** with a
@@ -40,7 +52,7 @@ two base classes. It does not test Django URL dispatch or database behavior.
   soft-deleted, or mismatched anchors are denied.
 - It also verifies non-anchor routes continue without board lookup.
 - `python3 -m unittest discover -s tests -p 'test_public_board*.py' -v`:
-  **7 passing tests** on a detached branch checkout; Python syntax compilation
+  **8 passing tests** on a detached branch checkout; Python syntax compilation
   passed and the test worktree was clean.
 
 A second isolated test compiles the actual mixin method and executes its
