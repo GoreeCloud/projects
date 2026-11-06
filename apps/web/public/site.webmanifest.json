@@ -1,13 +1,21 @@
 {
-  "name": "Plane",
-  "short_name": "Plane",
-  "description": "Plane helps you plan your issues, cycles, and product modules.",
+  "name": "GoreeCloud Projects",
+  "short_name": "GC Projects",
+  "description": "Self-hosted project planning, work items, cycles, modules, and roadmaps.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f9fafb",
   "theme_color": "#ffffff",
   "icons": [
-    { "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
