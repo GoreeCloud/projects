@@ -57,12 +57,16 @@ network permissions:
   `Minimatch` class or `minimatch()` function, not those removed APIs.
   This is static evidence, not a blanket compatibility guarantee.
 
-**New toolchain blocker:** The laptop's ordinary `pnpm --version` currently
-fails because its Corepack shim selects a missing cached 11.28.6 entry,
-although an intact project-pinned 11.10.0 cache exists. The global shim was
-**not** modified. Before another candidate upgrade or install, repair the
-pinning/reproducibility path through authorized, verified maintenance; do
-not silently substitute a different package manager.
+**Corepack working-directory finding (resolved for this repository):**
+The initial `pnpm --version` command ran from Desktop Commander's
+**default working directory outside the Projects repository** and failed
+because Corepack selected an unavailable cached 11.28.6 entry. Follow-up
+read-only verification explicitly changed to the GoreeCloud Projects root,
+where its `packageManager` pin correctly selected **pnpm 11.10.0** and the
+command succeeded. The current Projects source checkout remained clean.
+The unrelated default-directory Corepack cache remains unchanged; **do not
+treat it as a blocker for running the project-pinned package manager**.
+No global shim was repaired or replaced.
 
 **Decision:** Keep this PR at the existing verified **one moderate finding**.
 Do not assert that the `minimatch` advisory is remediated in the repository.
