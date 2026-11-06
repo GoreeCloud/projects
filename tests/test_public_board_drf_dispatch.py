@@ -142,6 +142,27 @@ class PublicBoardDRFDispatchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, {"published": True})
 
+    def test_unpublish_revokes_access_on_next_request(self):
+        # Verify database state is consulted for each request rather than
+        # caching a previously accepted publication anchor in the view.
+        workspace = self.Workspace.objects.create()
+        project = self.Project.objects.create(workspace=workspace)
+        board = self.Board.objects.create(
+            anchor="published", entity_name="project",
+            project=project, workspace=workspace,
+            entity_identifier=project.pk,
+            is_disabled=False, deleted_at=None,
+        )
+        self.assertEqual(self.request_board("published").status_code, 200)
+        self.Board.objects.filter(pk=board.pk).update(is_disabled=True)
+        self.assertEqual(self.request_board("published").status_code, 404)
+
+        self.Board.objects.filter(pk=board.pk).update(is_disabled=False)
+        self.assertEqual(self.request_board("published").status_code, 200)
+        from django.utils import timezone
+        self.Project.objects.filter(pk=project.pk).update(deleted_at=timezone.now())
+        self.assertEqual(self.request_board("published").status_code, 404)
+
     def test_revoked_and_invalid_boards_return_http_404(self):
         from django.utils import timezone
         cases = (
