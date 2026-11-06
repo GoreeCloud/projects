@@ -56,6 +56,23 @@ The 10 upstream Actions workflows were relocated outside active workflow paths
 to [docs/upstream-github-workflows](docs/upstream-github-workflows), pending review.
 No automatic imported workflow is enabled.
 
+### Upstream release lookup privacy (draft PR #13)
+
+During instance registration, the inherited Plane version checker originally
+contacted the Plane GitHub releases API even when metrics telemetry was off.
+This development proposal uses the local version without a network lookup by
+default. An administrator can independently opt in to that specific request:
+
+```dotenv
+GOREECLOUD_ALLOW_UPSTREAM_RELEASE_CHECK=1
+```
+
+Only the exact value `1` permits that lookup. It contacts the **upstream
+Plane** release feed, not a GoreeCloud update service. The default-off setting
+does not block other application network traffic; all external egress requires
+separate review and deployment-time network policy enforcement. See
+[upstream release privacy review](docs/UPSTREAM-RELEASE-LOOKUP-PRIVACY-REVIEW.md).
+
 ## Next implementation milestones
 
 1. Review license/asset rights, dependencies, vulnerabilities and automation.
