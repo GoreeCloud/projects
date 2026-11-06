@@ -8,7 +8,9 @@
 The existing `DeployBoardAnchorMixin.initial` checked only for an inconsistent
 `entity_identifier` on boards whose `entity_name` was `project`.
 It did not reject unknown anchors, disabled boards, soft-deleted boards or
-anchors for other entity types. Multiple anonymous-access project-board
+anchors for other entity types. An enabled board could also remain reachable
+if its parent project/workspace was soft-deleted or the board's stored workspace
+did not match its project's workspace. Multiple anonymous-access project-board
 views inherit this mixin.
 
 The proposed guard requires each request with an `anchor` kwarg to resolve to
@@ -18,6 +20,8 @@ one matching project board with:
 - `entity_name="project"`;
 - `is_disabled=False`;
 - `deleted_at IS NULL`;
+- its parent project and workspace both have `deleted_at IS NULL`;
+- its `project__workspace_id` equals the board's `workspace_id`;
 - `entity_identifier` equal to the related `project_id`.
 
 If the board does not pass, `NotFound` is raised **before the handler runs**.
@@ -58,14 +62,16 @@ The added structural test detects newly introduced unanchored public routes.
 A second isolated test compiles the actual mixin method and executes its
 `F("project_id")`, `deleted_at IS NULL` and `is_disabled=False` filters
 against a real **Django 5.2.17 ORM**, with synthetic project-board rows in a
-private **in-memory SQLite database**. Valid and invalid examples passed.
+private **in-memory SQLite database**. Valid and invalid examples passed,
+including deleted parent project/workspace and inconsistent tenant relationships.
 No Plane models, services, credentials or real data are loaded.
 
 An additional two tests instantiate a synthetic `APIView` with the actual
 `DeployBoardAnchorMixin`, dispatch GET requests using **Django REST Framework
 3.18.3** `APIRequestFactory`, and verify that a valid board returns HTTP
 200 while missing, disabled, deleted, non-project and mismatched boards return
-HTTP 404. They execute on synthetic Django 5.2.17 SQLite rows without
+HTTP 404, including soft-deleted parent entities and cross-workspace
+board records. They execute on synthetic Django 5.2.17 SQLite rows without
 production user/session models or an external exporter.
 
 The combined local-only integration of draft PRs #3, #5, #7, #8, #10 and #11
