@@ -59,6 +59,23 @@ class PublicBoardDjangoQueryTests(unittest.TestCase):
         from django.db import connection, models
         cls.connection = connection
         cls.F = models.F
+        cls.Workspace = type("SyntheticBoardWorkspace", (models.Model,), {
+            "__module__": __name__,
+            "id": models.UUIDField(primary_key=True, default=uuid4),
+            "deleted_at": models.DateTimeField(null=True),
+            "Meta": type("Meta", (), {
+                "app_label": "gc_synthetic_board", "db_table": "gc_board_workspace_only",
+            }),
+        })
+        cls.Project = type("SyntheticBoardProject", (models.Model,), {
+            "__module__": __name__,
+            "id": models.UUIDField(primary_key=True, default=uuid4),
+            "deleted_at": models.DateTimeField(null=True),
+            "workspace": models.ForeignKey(cls.Workspace, on_delete=models.CASCADE),
+            "Meta": type("Meta", (), {
+                "app_label": "gc_synthetic_board", "db_table": "gc_board_project_only",
+            }),
+        })
         cls.Board = type(
             "SyntheticPublicBoard",
             (models.Model,),
@@ -68,7 +85,8 @@ class PublicBoardDjangoQueryTests(unittest.TestCase):
                 "entity_name": models.CharField(max_length=30),
                 "is_disabled": models.BooleanField(default=False),
                 "deleted_at": models.DateTimeField(null=True),
-                "project_id": models.UUIDField(),
+                "workspace": models.ForeignKey(cls.Workspace, on_delete=models.CASCADE),
+                "project": models.ForeignKey(cls.Project, on_delete=models.CASCADE),
                 "entity_identifier": models.UUIDField(),
                 "Meta": type("Meta", (), {
                     "app_label": "gc_synthetic_board",
@@ -77,16 +95,20 @@ class PublicBoardDjangoQueryTests(unittest.TestCase):
             },
         )
         with connection.schema_editor() as editor:
-            editor.create_model(cls.Board)
+            for model in (cls.Workspace, cls.Project, cls.Board):
+                editor.create_model(model)
         cls.Guard = get_actual_guard(cls.Board, cls.F)
 
     @classmethod
     def tearDownClass(cls):
         with cls.connection.schema_editor() as editor:
-            editor.delete_model(cls.Board)
+            for model in (cls.Board, cls.Project, cls.Workspace):
+                editor.delete_model(model)
 
     def tearDown(self):
         self.Board.objects.all().delete()
+        self.Project.objects.all().delete()
+        self.Workspace.objects.all().delete()
 
     def invoke(self, anchor):
         view = self.Guard()
@@ -97,33 +119,55 @@ class PublicBoardDjangoQueryTests(unittest.TestCase):
             return True
 
     def test_valid_board_matches_real_sql_queryset(self):
-        value = uuid4()
+        workspace = self.Workspace.objects.create()
+        project = self.Project.objects.create(workspace=workspace)
         self.Board.objects.create(
             anchor="sample", entity_name="project", is_disabled=False,
-            deleted_at=None, project_id=value, entity_identifier=value,
+            deleted_at=None, project=project, workspace=workspace,
+            entity_identifier=project.pk,
         )
         self.assertFalse(self.invoke("sample"))
         self.assertTrue(self.invoke("unknown"))
 
     def test_disabled_and_mismatched_anchors_deny_in_real_orm(self):
         from django.utils import timezone
-        for overrides in (
-            {"entity_name": "module"},
-            {"is_disabled": True},
-            {"deleted_at": timezone.now()},
-            {"entity_identifier": uuid4()},
-        ):
-            with self.subTest(overrides=overrides):
-                project = uuid4()
-                fields = {
-                    "anchor": "sample", "entity_name": "project",
-                    "project_id": project, "entity_identifier": project,
-                    "is_disabled": False, "deleted_at": None,
-                }
-                fields.update(overrides)
-                self.Board.objects.create(**fields)
-                self.assertTrue(self.invoke("sample"))
-                self.Board.objects.all().delete()
+        cases = (
+            "non_project", "disabled", "deleted_board", "wrong_identifier",
+            "deleted_project", "deleted_workspace", "cross_workspace",
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                self.tearDown()
+                workspace = self.Workspace.objects.create()
+                project = self.Project.objects.create(workspace=workspace)
+                board = self.Board.objects.create(
+                    anchor="sample", entity_name="project", is_disabled=False,
+                    deleted_at=None, project=project, workspace=workspace,
+                    entity_identifier=project.pk,
+                )
+                if case == "non_project":
+                    board.entity_name = "module"
+                    board.save(update_fields=["entity_name"])
+                elif case == "disabled":
+                    board.is_disabled = True
+                    board.save(update_fields=["is_disabled"])
+                elif case == "deleted_board":
+                    board.deleted_at = timezone.now()
+                    board.save(update_fields=["deleted_at"])
+                elif case == "wrong_identifier":
+                    board.entity_identifier = uuid4()
+                    board.save(update_fields=["entity_identifier"])
+                elif case == "deleted_project":
+                    project.deleted_at = timezone.now()
+                    project.save(update_fields=["deleted_at"])
+                elif case == "deleted_workspace":
+                    workspace.deleted_at = timezone.now()
+                    workspace.save(update_fields=["deleted_at"])
+                elif case == "cross_workspace":
+                    other = self.Workspace.objects.create()
+                    board.workspace = other
+                    board.save(update_fields=["workspace"])
+                self.assertTrue(self.invoke("sample"), case)
 
 
 if __name__ == "__main__":
