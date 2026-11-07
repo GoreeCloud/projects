@@ -66,14 +66,20 @@ def keyword_names(method):
     }
 
 
-def explicit_denial(method):
-    # An endpoint which unconditionally raises NotFound is a permissible
-    # temporary fail-closed alternative to exposing an unreviewed capability.
-    return any(
-        isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call)
-        and isinstance(node.exc.func, ast.Name)
-        and node.exc.func.id in {"NotFound", "Http404"}
-        for node in ast.walk(method)
+def unconditional_denial(method):
+    # Only a direct, unconditional first-statement denial qualifies.
+    # A nested/conditional NotFound must NOT satisfy this acceptance gate.
+    statements = list(method.body)
+    if (statements and isinstance(statements[0], ast.Expr)
+            and isinstance(statements[0].value, ast.Constant)
+            and isinstance(statements[0].value.value, str)):
+        statements.pop(0)
+    first = statements[0] if statements else None
+    return (
+        isinstance(first, ast.Raise)
+        and isinstance(first.exc, ast.Call)
+        and isinstance(first.exc.func, ast.Name)
+        and first.exc.func.id in {"NotFound", "Http404"}
     )
 
 
@@ -94,6 +100,8 @@ class PendingUnanchoredPublicBoardReleaseGates(unittest.TestCase):
 
     def test_workspace_board_list_never_uses_unbound_values_list_method(self):
         method = load_methods()["WorkspaceProjectDeployBoardEndpoint"]
+        if unconditional_denial(method):
+            return
         uncalled = [
             node for node in ast.walk(method)
             if isinstance(node, (ast.Assign, ast.AnnAssign))
@@ -107,7 +115,7 @@ class PendingUnanchoredPublicBoardReleaseGates(unittest.TestCase):
 
     def test_workspace_board_list_is_publication_scoped_or_disabled(self):
         method = load_methods()["WorkspaceProjectDeployBoardEndpoint"]
-        if explicit_denial(method):
+        if unconditional_denial(method):
             return
         fields = keyword_names(method)
         required = {
@@ -131,7 +139,7 @@ class PendingUnanchoredPublicBoardReleaseGates(unittest.TestCase):
         self.assertEqual(
             [arg.arg for arg in method.args.args][2:], ["slug", "project_id"]
         )
-        if explicit_denial(method):
+        if unconditional_denial(method):
             return
         fields = keyword_names(method)
         required = {
