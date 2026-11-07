@@ -84,6 +84,35 @@ These are isolated DRF-dispatch and synthetic ORM tests, **not** the full
 Plane Django application on PostgreSQL, its actual URL router, reverse proxy,
 or a deployed publication/revocation test.
 
+## Offline PostgreSQL 17 predicate test (executed, NOT full Plane)
+
+`tests/security/public_board_postgres_guard.sql` and
+`tests/security/run_public_board_postgres_guard.sh` add a reproducible,
+PostgreSQL-specific **synthetic data** regression for the intended SQL
+predicates. The shell runner uses a previously cached PostgreSQL 17 image
+with Podman `--pull=never --network=none --read-only`, no published ports,
+no bind mounts, dropped capabilities, a restricted PID/memory budget, and
+temporary in-memory writable locations. It stops and removes its container
+on completion. It cannot contact production through network access.
+
+The SQL transaction creates temporary workspace, project, and board tables;
+checks that **one valid board is visible and seven disabled, deleted,
+wrong-type, mismatched or cross-workspace records are denied**; then disables
+the previously visible board and verifies that the next query returns no
+published boards. The transaction is rolled back.
+
+On November 6, 2026, the committed runner completed successfully against
+a clean detached checkout, reporting
+`POSTGRES17_PUBLIC_BOARD_SCOPE_PASS` and
+`POSTGRES17_PUBLIC_BOARD_REVOCATION_PASS`. Readback confirmed **zero
+residual test containers** and a clean worktree. The container uses a
+temporary `trust` authentication mode **only** inside its network-disabled
+sandbox and is never suitable for production.
+
+**Limitation:** This is hand-authored SQL mirroring the intended predicate
+logic, not the ORM-generated SQL or the real Plane/Django URL and authorization
+stack. It does not count toward the application's pending HTTP contract cases.
+
 ## Full-application PostgreSQL contract tests (prepared, not executed)
 
 `apps/api/plane/tests/contract/app/test_public_board_publication_boundary_app.py`
@@ -94,9 +123,10 @@ They cover disabled, deleted, parent-deleted, cross-workspace and anonymous
 access to published project-board routes, plus next-request revocation.
 
 The file was compiled, AST-inspected, and read back successfully in a clean,
-detached source worktree; its tests were **NOT run**. The authorized laptop
-has no PostgreSQL test server and its existing minimal isolated environment
-does not contain the full Plane application dependencies. **Do not include
+detached source worktree; its tests were **NOT run**. A sandboxed PostgreSQL 17
+container image is now available for synthetic SQL checks, but the minimal
+isolated Python environment still lacks the complete Plane application/test
+dependencies required to execute this full-stack contract. **Do not include
 these nine cases in any passing isolated-suite test count.**
 
 For a future authorized isolated Plane/PostgreSQL test environment, run this
