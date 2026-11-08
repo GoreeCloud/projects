@@ -37,5 +37,7 @@ jobs:
           fetch-depth: 1
       - name: Compile bounded source-only release checks
         run: python3 -m compileall -q acceptance
+      - name: Verify the gate analyzer rejects unsafe query variants
+        run: python3 -m unittest discover -s tests -p test_pending_public_board_gate_semantics.py -v
       - name: Require public routes to be denied or publication-scoped
         run: python3 -m unittest discover -s acceptance -p pending_public_board_routes.py -v
