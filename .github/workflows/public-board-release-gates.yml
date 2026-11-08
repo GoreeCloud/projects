@@ -1,0 +1,43 @@
+# Copyright (c) 2026 GoreeCloud
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Source-only release gates for the two unanchored anonymous public-board
+# endpoints. These gates are EXPECTED TO FAIL while issues #6/#12 are open.
+# No dependencies, package installers, scripts from the Plane import,
+# deployment targets, secrets, write permissions or network services required.
+name: Public board release gates
+
+on:
+  pull_request:
+    paths:
+      - "acceptance/**"
+      - "apps/api/plane/space/**"
+      - ".github/workflows/public-board-release-gates.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-board-release-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unanchored-public-routes:
+    name: Fail closed on unanchored public-board routes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source without retaining credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Compile bounded source-only release checks
+        run: python3 -m compileall -q acceptance
+      - name: Verify the gate analyzer rejects unsafe query variants
+        run: python3 -m unittest discover -s tests -p test_pending_public_board_gate_semantics.py -v
+      - name: Require public routes to be denied or publication-scoped
+        run: python3 -m unittest discover -s acceptance -p pending_public_board_routes.py -v
