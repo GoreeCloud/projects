@@ -65,6 +65,40 @@ The two endpoint implementations were **not edited**. A previously
 safety-blocked source modification must not be bypassed through an
 alternate tool or new branch.
 
+## Automated, fail-closed review gate — November 8, 2026
+
+`.github/workflows/public-board-release-gates.yml` runs on relevant pull
+requests, or by manual dispatch after it is available on the default branch.
+It uses an official checkout action **pinned to its exact v7 commit SHA**,
+`persist-credentials: false`, `contents: read` permissions, a short job
+timeout, and no dependency installation, imported Plane execution,
+production credentials or deployment operations. No write privileges are
+needed. The GitHub Actions version available on the draft PR can execute
+before the workflow is merged into `main`.
+
+`tests/test_pending_public_board_gate_semantics.py` verifies **seven
+passing analyzer behaviors**: expected publication predicates, rejecting
+`.exclude()`, inverted booleans and entity names, unrelated model queries,
+wrong workspace/project comparisons, correct first-statement denial, and
+rejecting conditional denial. The analyzer now requires the correct
+constant/dynamic field values on direct `DeployBoard.objects.get/filter`
+queries; a mere keyword spelling no longer suffices.
+
+The four **actual** endpoint acceptance checks remain **RED**. Locally on
+November 8, 2026, seven analyzer self-tests passed while all four route
+checks failed. GitHub Actions run
+[42501979220](https://github.com/GoreeCloud/projects/actions/runs/42501979220)
+also confirmed the checkout, compile and self-test steps succeeded while
+the final release-gate step failed for those four defects. The checkout
+was subsequently pinned to official v7 (Node 24 compatible) to avoid the
+deprecated Node 20 action runtime; independently verify the latest run
+before claiming that workflow revision passed its infrastructure steps.
+
+These static checks still cannot prove data-flow authorization, conditional
+query chaining, caching or full-application security. A safe implementation
+may require updating the narrow analyzer after independent review and
+must pass separate real Django/PostgreSQL HTTP authorization checks.
+
 ## Acceptance path
 
 - Confirm intended product behavior for workspace board lists. Prefer
