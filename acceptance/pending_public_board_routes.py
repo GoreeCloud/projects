@@ -55,15 +55,57 @@ def route_path_for(handler, file_path):
     return matching[0]
 
 
-def keyword_names(method):
-    return {
-        kw.arg
-        for node in ast.walk(method)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in {"get", "filter", "exclude"}
-        for kw in node.keywords if kw.arg is not None
+def approved_predicate_value(key, value):
+    # A spelling-only keyword check can produce false green results, for
+    # example exclude(is_disabled=False) or filter(is_disabled=True).
+    constants = {
+        "is_disabled": False,
+        "deleted_at__isnull": True,
+        "project__deleted_at__isnull": True,
+        "workspace__deleted_at__isnull": True,
+        "entity_name": "project",
     }
+    if key in constants:
+        return isinstance(value, ast.Constant) and value.value == constants[key]
+    if key in {"workspace__slug", "project_id"}:
+        expected = "slug" if key == "workspace__slug" else "project_id"
+        return isinstance(value, ast.Name) and value.id == expected
+    if key == "entity_identifier":
+        if isinstance(value, ast.Name) and value.id == "project_id":
+            return True
+        return (
+            isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name) and value.func.id == "F"
+            and len(value.args) == 1
+            and isinstance(value.args[0], ast.Constant)
+            and value.args[0].value == "project_id"
+        )
+    if key == "project__workspace_id":
+        return (
+            isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name) and value.func.id == "F"
+            and len(value.args) == 1
+            and isinstance(value.args[0], ast.Constant)
+            and value.args[0].value == "workspace_id"
+        )
+    return False
+
+
+def keyword_names(method):
+    # Deliberately narrow: only the direct DeployBoard ORM lookup contributes
+    # to proof of publication scoping. A side query, .exclude(), or a keyword
+    # with an unsafe value must not satisfy a security release gate.
+    names = set()
+    for node in ast.walk(method):
+        if not (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"get", "filter"}
+                and ast.unparse(node.func.value).startswith("DeployBoard.objects")):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg and approved_predicate_value(keyword.arg, keyword.value):
+                names.add(keyword.arg)
+    return names
 
 
 def unconditional_denial(method):
