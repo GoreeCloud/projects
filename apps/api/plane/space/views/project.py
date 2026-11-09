@@ -20,7 +20,18 @@ class ProjectDeployBoardPublicSettingsEndpoint(BaseAPIView):
     permission_classes = [AllowAny]
 
     def get(self, request, anchor):
-        project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
+        # Public settings must honor the *current* publication and ownership
+        # state, not merely possession of a historical URL anchor.
+        project_deploy_board = DeployBoard.objects.get(
+            anchor=anchor,
+            entity_name="project",
+            entity_identifier=F("project_id"),
+            is_disabled=False,
+            deleted_at__isnull=True,
+            project__deleted_at__isnull=True,
+            workspace__deleted_at__isnull=True,
+            project__workspace_id=F("workspace_id"),
+        )
         serializer = DeployBoardSerializer(project_deploy_board)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -91,7 +102,18 @@ class ProjectMembersEndpoint(BaseAPIView):
     permission_classes = [AllowAny]
 
     def get(self, request, anchor):
-        deploy_board = DeployBoard.objects.filter(anchor=anchor).first()
+        # Anonymous member profiles are visible only for a live, published
+        # project board. An issue/custom anchor cannot select member records.
+        deploy_board = DeployBoard.objects.filter(
+            anchor=anchor,
+            entity_name="project",
+            entity_identifier=F("project_id"),
+            is_disabled=False,
+            deleted_at__isnull=True,
+            project__deleted_at__isnull=True,
+            workspace__deleted_at__isnull=True,
+            project__workspace_id=F("workspace_id"),
+        ).first()
         if not deploy_board:
             return Response(
                 {"error": "Invalid anchor"},
