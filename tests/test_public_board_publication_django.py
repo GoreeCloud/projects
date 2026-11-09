@@ -97,8 +97,38 @@ class AnonymousPublicationQueryTests(unittest.TestCase):
             "Meta": type("Meta", (), {"app_label": "gc_public_space_only",
                                       "db_table": "gc_synthetic_space_project_member"}),
         })
+        # Five additional anchor routes query project-scoped cycles, modules,
+        # states and labels; only synthetic data, no Plane app models or DB.
+        def ancillary(name, table, attrs):
+            return type("SyntheticSpace" + name, (models.Model,), {
+                "__module__": __name__,
+                "id": models.UUIDField(primary_key=True, default=uuid4),
+                "workspace": models.ForeignKey(cls.Workspace, on_delete=models.CASCADE),
+                "project": models.ForeignKey(cls.Project, on_delete=models.CASCADE),
+                **attrs,
+                "Meta": type("Meta", (), {"app_label": "gc_public_space_only",
+                                          "db_table": table}),
+            })
+        cls.Cycle = ancillary("Cycle", "gc_synthetic_space_cycle", {
+            "name": models.CharField(max_length=80),
+        })
+        cls.Module = ancillary("Module", "gc_synthetic_space_module", {
+            "name": models.CharField(max_length=80),
+        })
+        cls.State = ancillary("State", "gc_synthetic_space_state", {
+            "name": models.CharField(max_length=80),
+            "group": models.CharField(max_length=25),
+            "color": models.CharField(max_length=10),
+            "sequence": models.IntegerField(default=1),
+        })
+        cls.Label = ancillary("Label", "gc_synthetic_space_label", {
+            "name": models.CharField(max_length=80),
+            "color": models.CharField(max_length=10),
+            "parent": models.UUIDField(null=True),
+        })
         with connection.schema_editor() as editor:
-            for model in (cls.Workspace, cls.Project, cls.Board, cls.Member, cls.ProjectMember):
+            for model in (cls.Workspace, cls.Project, cls.Board, cls.Member,
+                          cls.ProjectMember, cls.Cycle, cls.Module, cls.State, cls.Label):
                 editor.create_model(model)
 
         class SyntheticBaseAPIView(APIView):
@@ -116,8 +146,16 @@ class AnonymousPublicationQueryTests(unittest.TestCase):
             def __init__(self, board):
                 self.data = {"anchor": board.anchor, "projectId": str(board.project_id)}
 
+        class SyntheticProjectSerializer:
+            def __init__(self, project):
+                self.data = {"id": str(project.id), "name": project.name}
+
+        from django.db.models import Q
         tree = ast.parse(SOURCE.read_text())
         scope = {
+            "Cycle": cls.Cycle, "Module": cls.Module,
+            "State": cls.State, "Label": cls.Label, "Q": Q,
+            "ProjectLiteSerializer": SyntheticProjectSerializer,
             "SyntheticBaseAPIView": SyntheticBaseAPIView,
             "Project": cls.Project,
             "DeployBoard": cls.Board,
@@ -136,15 +174,34 @@ class AnonymousPublicationQueryTests(unittest.TestCase):
             isolated = ast.fix_missing_locations(ast.Module(body=[original], type_ignores=[]))
             exec(compile(isolated, str(SOURCE), "exec"), scope)
             cls.views[name] = scope[name].as_view()
+        more_routes = {
+            "ProjectCyclesEndpoint": "cycle.py",
+            "ProjectModulesEndpoint": "module.py",
+            "ProjectStatesEndpoint": "state.py",
+            "ProjectLabelsEndpoint": "label.py",
+            "ProjectMetaDataEndpoint": "meta.py",
+        }
+        for name, filename in more_routes.items():
+            tree = ast.parse((SOURCE.parent / filename).read_text())
+            original = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == name)
+            original.bases = [ast.Name(id="SyntheticBaseAPIView", ctx=ast.Load())]
+            original.keywords = []
+            original.decorator_list = []
+            isolated = ast.fix_missing_locations(ast.Module(body=[original], type_ignores=[]))
+            exec(compile(isolated, str(SOURCE.parent / filename), "exec"), scope)
+            cls.views[name] = scope[name].as_view()
         cls.factory = APIRequestFactory()
 
     @classmethod
     def tearDownClass(cls):
         with cls.connection.schema_editor() as editor:
-            for model in (cls.ProjectMember, cls.Member, cls.Board, cls.Project, cls.Workspace):
+            for model in (cls.Label, cls.State, cls.Module, cls.Cycle, cls.ProjectMember,
+                          cls.Member, cls.Board, cls.Project, cls.Workspace):
                 editor.delete_model(model)
 
     def tearDown(self):
+        for model in (self.Label, self.State, self.Module, self.Cycle):
+            model.objects.all().delete()
         self.ProjectMember.objects.all().delete()
         self.Member.objects.all().delete()
         self.Board.objects.all().delete()
@@ -238,6 +295,77 @@ class AnonymousPublicationQueryTests(unittest.TestCase):
         board.save(update_fields=["workspace"])
         self.assertEqual(self.settings(board.anchor).status_code, 404)
         self.assertEqual(self.members(board.anchor).status_code, 404)
+
+    def auxiliary(self, handler, anchor):
+        return self.views[handler](
+            self.factory.get("/anchor/" + anchor + "/scope/"), anchor=anchor)
+
+    def test_cycles_modules_states_labels_and_metadata_are_only_published(self):
+        ws, project, board = self.create_pair()
+        other_ws, other_project, other_board = self.create_pair("unrelated")
+        self.Cycle.objects.create(workspace=ws, project=project, name="Current cycle")
+        self.Module.objects.create(workspace=ws, project=project, name="Current module")
+        self.State.objects.create(workspace=ws, project=project, name="Started", group="started",
+                                  color="#000000", sequence=2)
+        self.State.objects.create(workspace=ws, project=project, name="Triage", group="backlog",
+                                  color="#222222", sequence=1)
+        self.Label.objects.create(workspace=ws, project=project, name="Work", color="#ffffff")
+        # Similar named records from a different tenant must not leak.
+        self.Cycle.objects.create(workspace=other_ws, project=other_project, name="Private cycle")
+        for handler, expected_field in (
+            ("ProjectCyclesEndpoint", "Current cycle"),
+            ("ProjectModulesEndpoint", "Current module"),
+            ("ProjectStatesEndpoint", "Started"),
+            ("ProjectLabelsEndpoint", "Work"),
+        ):
+            with self.subTest(handler=handler):
+                response = self.auxiliary(handler, board.anchor)
+                self.assertEqual(response.status_code, 200)
+                rows = list(response.data)
+                self.assertEqual([row["name"] for row in rows], [expected_field])
+                self.assertNotIn("Private cycle", str(rows))
+                self.assertEqual(self.auxiliary(handler, "missing").status_code, 404)
+        meta = self.auxiliary("ProjectMetaDataEndpoint", board.anchor)
+        self.assertEqual(meta.status_code, 200)
+        self.assertEqual(meta.data["id"], str(project.id))
+        self.assertEqual(self.auxiliary("ProjectMetaDataEndpoint", "missing").status_code, 404)
+
+    def test_five_auxiliary_public_routes_revoke_on_disabled_or_wrong_board(self):
+        from django.utils import timezone
+        ws, project, board = self.create_pair()
+        handlers = (
+            "ProjectCyclesEndpoint", "ProjectModulesEndpoint", "ProjectStatesEndpoint",
+            "ProjectLabelsEndpoint", "ProjectMetaDataEndpoint",
+        )
+        for field, value in (
+            ("is_disabled", True), ("deleted_at", timezone.now()),
+            ("entity_name", "issue"), ("entity_identifier", uuid4())
+        ):
+            old = getattr(board, field)
+            setattr(board, field, value)
+            board.save(update_fields=[field])
+            for handler in handlers:
+                with self.subTest(handler=handler, field=field):
+                    self.assertEqual(self.auxiliary(handler, board.anchor).status_code, 404)
+            setattr(board, field, old)
+            board.save(update_fields=[field])
+        other_ws = self.Workspace.objects.create(slug="other")
+        board.workspace = other_ws
+        board.save(update_fields=["workspace"])
+        for handler in handlers:
+            self.assertEqual(self.auxiliary(handler, board.anchor).status_code, 404)
+        board.workspace = ws
+        board.save(update_fields=["workspace"])
+        project.deleted_at = timezone.now()
+        project.save(update_fields=["deleted_at"])
+        for handler in handlers:
+            self.assertEqual(self.auxiliary(handler, board.anchor).status_code, 404)
+        project.deleted_at = None
+        project.save(update_fields=["deleted_at"])
+        ws.deleted_at = timezone.now()
+        ws.save(update_fields=["deleted_at"])
+        for handler in handlers:
+            self.assertEqual(self.auxiliary(handler, board.anchor).status_code, 404)
 
     def test_published_only_and_projection_does_not_expose_other_project_fields(self):
         ws, project, board = self.create_pair()
