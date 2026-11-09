@@ -1,6 +1,6 @@
 # Copyright (c) 2026 GoreeCloud
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Static source contracts for the two unanchored anonymous Space routes.
+"""Static source contracts for four scoped anonymous Space routes.
 
 These checks do NOT replace Django/PostgreSQL HTTP, tenant, revocation, or
 browser acceptance tests. The full security/release gate remains open.
@@ -95,6 +95,42 @@ class AnonymousBoardRoutingTests(unittest.TestCase):
         self.assertEqual(value, "workspaces/<str:slug>/projects/<uuid:project_id>/anchor/")
         self.assertEqual([a.arg for a in method("WorkspaceProjectAnchorEndpoint").args.args],
                          ["self", "request", *re.findall(r"<[^:>]+:([^>]+)>", value)])
+
+    def test_public_settings_and_member_routes_accept_only_anchor(self):
+        for handler, expected in (
+            ("ProjectDeployBoardPublicSettingsEndpoint", "anchor/<str:anchor>/settings/"),
+            ("ProjectMembersEndpoint", "anchor/<str:anchor>/members/"),
+        ):
+            with self.subTest(handler=handler):
+                value = route(handler, "project.py")
+                self.assertEqual(value, expected)
+                self.assertEqual([argument.arg for argument in method(handler).args.args],
+                                 ["self", "request", "anchor"])
+
+    def test_public_settings_and_member_routes_require_active_project_publication(self):
+        required = {
+            name: value for name, value in PUBLICATION.items()
+            if name != "workspace__slug"
+        }
+        for handler, verb in (
+            ("ProjectDeployBoardPublicSettingsEndpoint", "get"),
+            ("ProjectMembersEndpoint", "filter"),
+        ):
+            with self.subTest(handler=handler):
+                view = method(handler)
+                predicates = orm_call(view, "DeployBoard.objects", verb)
+                self.assertEqual(len(predicates), 1)
+                self.assertEqual(keywords(predicates[0]), {"anchor": "anchor", **required})
+        # The members endpoint must restrict its data source to active
+        # records on the selected publication's project AND workspace.
+        view = method("ProjectMembersEndpoint")
+        members = orm_call(view, "ProjectMember.objects", "filter")
+        self.assertEqual(len(members), 1)
+        self.assertEqual(keywords(members[0]), {
+            "project": "deploy_board.project",
+            "workspace": "deploy_board.workspace",
+            "is_active": "True",
+        })
 
     def test_anonymous_anchor_lookup_enforces_current_publication(self):
         view = method("WorkspaceProjectAnchorEndpoint")
