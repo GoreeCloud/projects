@@ -1,0 +1,33 @@
+name: Projects anonymous public-board source and isolated ORM contracts
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/plane/space/views/**"
+      - "apps/api/plane/space/urls/**"
+      - "tests/test_public_board_*.py"
+      - "tests/requirements-public-board-review.txt"
+      - ".github/workflows/public-board-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Fetch reviewed source without persisted GitHub credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Prepare isolated Python environment
+        run: python3 -m venv .gc-public-board-venv
+      - name: Install only five hashed Python wheels from the imported lockfile
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PIP_NO_CACHE_DIR: "1"
+        run: |
+          .gc-public-board-venv/bin/python -m pip install --require-hashes --no-deps --only-binary=:all: -r tests/requirements-public-board-review.txt
+      - name: Test anonymous route source and disposable Django/DRF query contracts
+        run: .gc-public-board-venv/bin/python -m unittest discover -s tests -p "test_public_board_*.py" -v
