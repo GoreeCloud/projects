@@ -132,6 +132,48 @@ class AnonymousBoardRoutingTests(unittest.TestCase):
             "is_active": "True",
         })
 
+    def test_auxiliary_anchor_routes_are_literal_and_not_slug_enumerations(self):
+        handlers = {
+            "ProjectCyclesEndpoint": ("cycles", "cycle.py"),
+            "ProjectModulesEndpoint": ("modules", "module.py"),
+            "ProjectStatesEndpoint": ("states", "state.py"),
+            "ProjectLabelsEndpoint": ("labels", "label.py"),
+            "ProjectMetaDataEndpoint": ("meta", "meta.py"),
+        }
+        for handler, (suffix, filename) in handlers.items():
+            with self.subTest(handler=handler):
+                value = route(handler, "project.py")
+                self.assertEqual(value, "anchor/<str:anchor>/" + suffix + "/")
+                tree = ast.parse((SPACE / "views" / filename).read_text())
+                klass = next(node for node in tree.body if isinstance(node, ast.ClassDef)
+                             and node.name == handler)
+                endpoint = next(node for node in klass.body if isinstance(node, ast.FunctionDef)
+                                and node.name == "get")
+                self.assertEqual([arg.arg for arg in endpoint.args.args],
+                                 ["self", "request", "anchor"])
+
+    def test_auxiliary_anchor_queries_require_current_published_project_board(self):
+        expected = {
+            "anchor": "anchor",
+            **{key: value for key, value in PUBLICATION.items() if key != "workspace__slug"},
+        }
+        for handler, filename, verb in (
+            ("ProjectCyclesEndpoint", "cycle.py", "filter"),
+            ("ProjectModulesEndpoint", "module.py", "filter"),
+            ("ProjectStatesEndpoint", "state.py", "filter"),
+            ("ProjectLabelsEndpoint", "label.py", "filter"),
+            ("ProjectMetaDataEndpoint", "meta.py", "get"),
+        ):
+            with self.subTest(handler=handler):
+                tree = ast.parse((SPACE / "views" / filename).read_text())
+                klass = next(node for node in tree.body if isinstance(node, ast.ClassDef)
+                             and node.name == handler)
+                view = next(node for node in klass.body if isinstance(node, ast.FunctionDef)
+                            and node.name == "get")
+                lookups = orm_call(view, "DeployBoard.objects", verb)
+                self.assertEqual(len(lookups), 1)
+                self.assertEqual(keywords(lookups[0]), expected)
+
     def test_anonymous_anchor_lookup_enforces_current_publication(self):
         view = method("WorkspaceProjectAnchorEndpoint")
         matches = orm_call(view, "DeployBoard.objects", "get")
