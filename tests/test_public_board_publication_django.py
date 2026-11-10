@@ -164,6 +164,15 @@ class AnonymousPublicationQueryTests(unittest.TestCase):
             "Exists": Exists, "F": F, "OuterRef": OuterRef,
             "Response": Response, "status": status, "AllowAny": AllowAny,
         }
+        # Execute only the extracted issue lookup helper against disposable
+        # SQLite model stand-ins. This does not import Plane or migrate PostgreSQL.
+        issue_source = SOURCE.parent / "issue.py"
+        issue_tree = ast.parse(issue_source.read_text())
+        helper = next(n for n in issue_tree.body if isinstance(n, ast.FunctionDef)
+                      and n.name == "_published_project_board_queryset")
+        isolated = ast.fix_missing_locations(ast.Module(body=[helper], type_ignores=[]))
+        exec(compile(isolated, str(issue_source), "exec"), scope)
+        cls.issue_board_lookup = staticmethod(scope["_published_project_board_queryset"])
         cls.views = {}
         for name in ("WorkspaceProjectDeployBoardEndpoint", "WorkspaceProjectAnchorEndpoint",
                      "ProjectDeployBoardPublicSettingsEndpoint", "ProjectMembersEndpoint"):
@@ -366,6 +375,41 @@ class AnonymousPublicationQueryTests(unittest.TestCase):
         ws.save(update_fields=["deleted_at"])
         for handler in handlers:
             self.assertEqual(self.auxiliary(handler, board.anchor).status_code, 404)
+
+    def test_issue_publication_guard_rejects_revoked_and_foreign_board(self):
+        from django.utils import timezone
+        workspace, project, board = self.create_pair()
+        query = self.issue_board_lookup
+        self.assertEqual(query(board.anchor).get().id, board.id)
+        self.assertIsNone(query("unknown-anchor").first())
+        for field, value in (
+            ("is_disabled", True), ("deleted_at", timezone.now()),
+            ("entity_identifier", uuid4()), ("entity_name", "issue"),
+        ):
+            saved = getattr(board, field)
+            setattr(board, field, value)
+            board.save(update_fields=[field])
+            with self.subTest(field=field):
+                self.assertIsNone(query(board.anchor).first())
+                with self.assertRaises(self.Board.DoesNotExist):
+                    query(board.anchor).get()
+            setattr(board, field, saved)
+            board.save(update_fields=[field])
+            self.assertEqual(query(board.anchor).get().id, board.id)
+        project.deleted_at = timezone.now()
+        project.save(update_fields=["deleted_at"])
+        self.assertIsNone(query(board.anchor).first())
+        project.deleted_at = None
+        project.save(update_fields=["deleted_at"])
+        other = self.Workspace.objects.create(slug="foreign")
+        board.workspace = other
+        board.save(update_fields=["workspace"])
+        self.assertIsNone(query(board.anchor).first())
+        board.workspace = workspace
+        board.save(update_fields=["workspace"])
+        workspace.deleted_at = timezone.now()
+        workspace.save(update_fields=["deleted_at"])
+        self.assertIsNone(query(board.anchor).first())
 
     def test_published_only_and_projection_does_not_expose_other_project_fields(self):
         ws, project, board = self.create_pair()
