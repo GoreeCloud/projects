@@ -50,12 +50,21 @@ class DeployBoardAnchorMixin:
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         anchor = kwargs.get("anchor")
-        if (
-            anchor
-            and DeployBoard.objects.filter(anchor=anchor, entity_name="project")
-            .exclude(entity_identifier=F("project_id"))
-            .exists()
-        ):
+        if not anchor:
+            return
+
+        # Every public project-board endpoint must reject unknown, disabled,
+        # deleted, non-project or mismatched anchors before serving content.
+        if not DeployBoard.objects.filter(
+            anchor=anchor,
+            entity_name="project",
+            is_disabled=False,
+            deleted_at__isnull=True,
+            project__deleted_at__isnull=True,
+            workspace__deleted_at__isnull=True,
+            project__workspace_id=F("workspace_id"),
+            entity_identifier=F("project_id"),
+        ).exists():
             raise NotFound()
 
 
