@@ -38,6 +38,12 @@ class Command(BaseCommand):
             return "v0.1.0"
 
     def check_for_latest_version(self, fallback_version):
+        # Checking GitHub contacts a third party even when instance telemetry is
+        # disabled. Require separate, explicit administrator opt-in. Local
+        # release/version detection remains available without network access.
+        if os.environ.get("GOREECLOUD_ALLOW_UPSTREAM_RELEASE_CHECK") != "1":
+            return fallback_version
+
         try:
             response = requests.get(
                 "https://api.github.com/repos/makeplane/plane/releases/latest",
