@@ -3,7 +3,7 @@
 # See the LICENSE file for details.
 
 # Django imports
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, F, OuterRef
 
 # Third Party imports
 from rest_framework.response import Response
@@ -20,7 +20,18 @@ class ProjectDeployBoardPublicSettingsEndpoint(BaseAPIView):
     permission_classes = [AllowAny]
 
     def get(self, request, anchor):
-        project_deploy_board = DeployBoard.objects.get(anchor=anchor, entity_name="project")
+        # Public settings must honor the *current* publication and ownership
+        # state, not merely possession of a historical URL anchor.
+        project_deploy_board = DeployBoard.objects.get(
+            anchor=anchor,
+            entity_name="project",
+            entity_identifier=F("project_id"),
+            is_disabled=False,
+            deleted_at__isnull=True,
+            project__deleted_at__isnull=True,
+            workspace__deleted_at__isnull=True,
+            project__workspace_id=F("workspace_id"),
+        )
         serializer = DeployBoardSerializer(project_deploy_board)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -28,13 +39,28 @@ class ProjectDeployBoardPublicSettingsEndpoint(BaseAPIView):
 class WorkspaceProjectDeployBoardEndpoint(BaseAPIView):
     permission_classes = [AllowAny]
 
-    def get(self, request, anchor):
-        deploy_board = DeployBoard.objects.filter(anchor=anchor, entity_name="project").values_list
+    def get(self, request, slug):
+        # This route is anonymous: never enumerate unpublished or deleted
+        # projects, even when the workspace slug is known.
         projects = (
-            Project.objects.filter(workspace=deploy_board.workspace)
+            Project.objects.filter(
+                workspace__slug=slug,
+                workspace__deleted_at__isnull=True,
+                deleted_at__isnull=True,
+            )
             .annotate(
                 is_public=Exists(
-                    DeployBoard.objects.filter(anchor=anchor, project_id=OuterRef("pk"), entity_name="project")
+                    DeployBoard.objects.filter(
+                        workspace__slug=slug,
+                        project_id=OuterRef("pk"),
+                        entity_name="project",
+                        entity_identifier=F("project_id"),
+                        is_disabled=False,
+                        deleted_at__isnull=True,
+                        project__deleted_at__isnull=True,
+                        workspace__deleted_at__isnull=True,
+                        project__workspace_id=F("workspace_id"),
+                    )
                 )
             )
             .filter(is_public=True)
@@ -55,8 +81,18 @@ class WorkspaceProjectAnchorEndpoint(BaseAPIView):
     permission_classes = [AllowAny]
 
     def get(self, request, slug, project_id):
+        # Anonymous anchor discovery must enforce current publication state
+        # and ownership on every request; a stale or disabled board is hidden.
         project_deploy_board = DeployBoard.objects.get(
-            workspace__slug=slug, project_id=project_id, entity_identifier=project_id, entity_name="project"
+            workspace__slug=slug,
+            project_id=project_id,
+            entity_identifier=project_id,
+            entity_name="project",
+            is_disabled=False,
+            deleted_at__isnull=True,
+            project__deleted_at__isnull=True,
+            workspace__deleted_at__isnull=True,
+            project__workspace_id=F("workspace_id"),
         )
         serializer = DeployBoardSerializer(project_deploy_board)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -66,7 +102,18 @@ class ProjectMembersEndpoint(BaseAPIView):
     permission_classes = [AllowAny]
 
     def get(self, request, anchor):
-        deploy_board = DeployBoard.objects.filter(anchor=anchor).first()
+        # Anonymous member profiles are visible only for a live, published
+        # project board. An issue/custom anchor cannot select member records.
+        deploy_board = DeployBoard.objects.filter(
+            anchor=anchor,
+            entity_name="project",
+            entity_identifier=F("project_id"),
+            is_disabled=False,
+            deleted_at__isnull=True,
+            project__deleted_at__isnull=True,
+            workspace__deleted_at__isnull=True,
+            project__workspace_id=F("workspace_id"),
+        ).first()
         if not deploy_board:
             return Response(
                 {"error": "Invalid anchor"},
