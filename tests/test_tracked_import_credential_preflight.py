@@ -9,7 +9,9 @@ from functools import lru_cache
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_SCAN_BYTES = 2_000_000
@@ -40,8 +42,13 @@ def tracked_files():
 @lru_cache(maxsize=1)
 def bounded_text_contents():
     sources = []
+    checkout = ROOT.resolve()
     for name in tracked_files():
         path = ROOT / name
+        # Git can track symlinks. Never open their targets, including links to
+        # files outside the checkout or through a symlinked parent directory.
+        if path.is_symlink() or not path.resolve().is_relative_to(checkout):
+            continue
         if not path.is_file() or path.stat().st_size > MAX_SCAN_BYTES:
             continue
         payload = path.read_bytes()
@@ -56,6 +63,32 @@ def location(payload, offset):
 
 
 class PublicImportCredentialPreflightTests(unittest.TestCase):
+    def test_tracked_symlinks_do_not_escape_checkout(self):
+        checkout = ROOT.resolve()
+        escapes = [
+            name for name in tracked_files()
+            if (ROOT / name).is_symlink()
+            and not (ROOT / name).resolve().is_relative_to(checkout)
+        ]
+        # Source paths only; never read or display the target's contents.
+        self.assertEqual(escapes, [])
+
+    def test_bounded_scan_never_reads_symlink_targets(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "inside.txt").write_bytes(b"synthetic safe data")
+            with tempfile.TemporaryDirectory() as external:
+                outside = Path(external) / "outside.txt"
+                outside.write_bytes(b"synthetic private data")
+                (root / "outside-link.txt").symlink_to(outside)
+                (root / "inside-link.txt").symlink_to(root / "inside.txt")
+                with mock.patch(__name__ + ".ROOT", root), mock.patch(
+                    __name__ + ".tracked_files",
+                    return_value=("inside.txt", "inside-link.txt", "outside-link.txt"),
+                ):
+                    results = bounded_text_contents.__wrapped__()
+            self.assertEqual(results, (("inside.txt", b"synthetic safe data"),))
+
     def test_tracked_files_do_not_include_unexpected_sensitive_filenames(self):
         disallowed = []
         for name in tracked_files():
