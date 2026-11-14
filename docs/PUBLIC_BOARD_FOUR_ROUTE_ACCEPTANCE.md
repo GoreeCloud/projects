@@ -42,3 +42,30 @@ draft until those gates and intersecting PRs #10, #11, and #18 are reconciled.
 
 No production service, database, DNS, identity, public endpoint or user data
 is modified by this test-first development patch.
+
+## November 14, 2026 — disposable PostgreSQL query check (source-review branch)
+
+A **second, independent GitHub Actions job** now runs the same synthetic
+Django/DRF view-method regression cases against an ephemeral PostgreSQL 17
+service. The `GC_PUBLIC_BOARD_BACKEND=postgres` selection uses a fixed local
+test-only database/user/password rather than an operator-supplied connection
+string, and a new regression asserts that the selected PostgreSQL backend was
+actually used (not a silently substituted SQLite database).
+
+- PostgreSQL Official Image `17-alpine` is pinned to OCI index digest
+  `sha256:d3244e8ce3f165ee3c93d9c4a4b1d0fe48b3a89e2287b717fdcbbde92d405065`.
+- The Python 3.12 PostgreSQL driver wheels (`psycopg`, `psycopg-binary`
+  and `typing-extensions`) use exact `apps/api/uv.lock` versions and
+  SHA-256 hashes with no dependency resolution.
+- The SQLite and PostgreSQL jobs execute separately and **both must pass**.
+- [PostgreSQL and SQLite CI run 43603273233](https://github.com/GoreeCloud/projects/actions/runs/43603273233)
+  succeeded at PR source commit `fd4baedde3bd176d20dd5eb6eda6320d9c107925`.
+  The same source-only credential preflight was independently green before
+  this documentation update.
+
+**Scope remains limited:** PostgreSQL is a real, isolated database engine, but
+the models, query harness and base classes are synthetic substitutes. This
+does **not** run the imported Plane application, full migrations, production
+authorization, real tenants, external caches, identity policies, full route
+mapping or publication consent. Do not merge or deploy this draft solely
+because PostgreSQL synthetic query tests are green.
