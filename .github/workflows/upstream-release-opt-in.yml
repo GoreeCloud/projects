@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# First-party, nonpublishing source-only privacy regression.
+name: Projects upstream release network opt-in contract
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/plane/license/management/commands/register_instance.py"
+      - "tests/test_upstream_release_opt_in.py"
+      - ".github/workflows/upstream-release-opt-in.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/plane/license/management/commands/register_instance.py"
+      - "tests/test_upstream_release_opt_in.py"
+      - ".github/workflows/upstream-release-opt-in.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  offline-release-lookup-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Python syntax compile of the isolated method and tests
+        run: python3 -m py_compile apps/api/plane/license/management/commands/register_instance.py tests/test_upstream_release_opt_in.py
+      - name: Verify no upstream HTTP without exact opt-in
+        run: python3 -m unittest discover -s tests -p 'test_upstream_release_opt_in.py' -v
