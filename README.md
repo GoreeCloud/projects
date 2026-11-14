@@ -11,12 +11,12 @@
 Project execution and software delivery: work items, issues, cycles, modules,
 milestones, project documentation, dependencies, roadmaps, planning and releases.
 
-- **GoreeCloud Workspace Teams:** where people communicate and collaborate.
+- **GoreeCloud OpenRoom:** where people communicate and collaborate.
 - **GoreeCloud Projects:** where people organize, build, verify and ship projects.
 - **GoreeCloud Tasks:** intended future canonical shared task record across products.
 
 Today this import retains Plane's existing work-item models and separate database.
-**There is no live cross-product task sync, shared login, or Teams integration.**
+**There is no live cross-product task sync, shared login, or OpenRoom integration.**
 See [integration boundaries](docs/GOREECLOUD-INTEGRATION-BOUNDARIES.md).
 
 ## Source and provenance
@@ -62,5 +62,5 @@ No automatic imported workflow is enabled.
 2. Implement GoreeCloud UI and lawfully replace upstream trademark-bearing assets.
 3. Verify builds, secure installation, authorization, test data and recoverability.
 4. Build a validated shared Tasks contract and mapped work-item identities.
-5. Integrate Workspace Teams for permission-checked conversation links and notices.
+5. Integrate GoreeCloud OpenRoom for permission-checked conversation links and notices.
 6. Add opt-in GitHub links, issue intake, and release evidence without redundant data.

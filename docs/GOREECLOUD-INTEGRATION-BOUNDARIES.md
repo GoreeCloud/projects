@@ -1,6 +1,6 @@
 # GoreeCloud Projects — proposed integration boundaries
 
-**Workspace Teams:** communication, channels, membership, linked project
+**[GoreeCloud OpenRoom](https://github.com/GoreeCloud/openroom)** (formerly GoreeCloud Workspace Teams): communication, channels, membership, linked project
 discussions and collaboration notifications. Not a parallel developer issue registry.
 
 **Projects:** issues/work items, cycles, modules, milestones, roadmaps,
@@ -13,7 +13,7 @@ Do not claim the currently device-local Tasks clients are an active shared servi
 
 ## Safe staged integration
 
-1. Link issue URLs/IDs in authorized Teams conversations without copying records.
+1. Link issue URLs/IDs in authorized OpenRoom conversations without copying records.
 2. Use authenticated, permission-filtered, versioned events and idempotency keys.
 3. Verify shared identity, project roles, membership revocation and private links.
 4. Introduce explicit Plane-ID to GoreeCloud Task-ID mapping with field authority,
