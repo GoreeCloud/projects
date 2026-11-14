@@ -7,6 +7,7 @@ on:
       - "apps/api/plane/space/urls/**"
       - "tests/test_public_board_*.py"
       - "tests/requirements-public-board-review.txt"
+      - "tests/requirements-public-board-postgres.txt"
       - ".github/workflows/public-board-contract.yml"
 
 permissions:
@@ -31,3 +32,48 @@ jobs:
           .gc-public-board-venv/bin/python -m pip install --require-hashes --no-deps --only-binary=:all: -r tests/requirements-public-board-review.txt
       - name: Test anonymous route source and disposable Django/DRF query contracts
         run: .gc-public-board-venv/bin/python -m unittest discover -s tests -p "test_public_board_*.py" -v
+
+  postgresql-synthetic-review:
+    name: Isolated PostgreSQL publication and revocation contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: gc_public_board_test
+          POSTGRES_PASSWORD: synthetic-public-board-test-only
+          POSTGRES_DB: gc_public_board_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gc_public_board_test -d gc_public_board_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Fetch reviewed source without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Prepare isolated Python 3.12 environment
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Create isolated package environment
+        run: python3 -m venv .gc-public-board-pg-venv
+      - name: Install only hash-pinned Django and PostgreSQL driver wheels
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PIP_NO_CACHE_DIR: "1"
+        run: |
+          .gc-public-board-pg-venv/bin/python -m pip install --require-hashes --no-deps --only-binary=:all: -r tests/requirements-public-board-review.txt -r tests/requirements-public-board-postgres.txt
+      - name: Run real PostgreSQL queries with synthetic source-extracted views
+        env:
+          GC_PUBLIC_BOARD_BACKEND: postgres
+          PYTHONNOUSERSITE: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          .gc-public-board-pg-venv/bin/python -m unittest discover -s tests -p 'test_public_board_publication_django.py' -v
