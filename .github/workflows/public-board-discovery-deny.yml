@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Source-only nonpublishing review; no Plane, migrations, secrets or network needed.
+name: Projects unanchored public-board discovery deny gate
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/plane/space/views/project.py"
+      - "apps/api/plane/space/urls/intake.py"
+      - "apps/api/plane/space/urls/project.py"
+      - "tests/test_unanchored_board_discovery_denied.py"
+      - ".github/workflows/public-board-discovery-deny.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/plane/space/views/project.py"
+      - "apps/api/plane/space/urls/intake.py"
+      - "apps/api/plane/space/urls/project.py"
+      - "tests/test_unanchored_board_discovery_denied.py"
+      - ".github/workflows/public-board-discovery-deny.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  denied-unauthenticated-discovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read-only checkout without persistent GitHub credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Compile exact source and stdlib regression
+        run: python3 -m py_compile apps/api/plane/space/views/project.py tests/test_unanchored_board_discovery_denied.py
+      - name: Verify unanchored handlers cannot disclose project information
+        run: python3 -m unittest discover -s tests -p 'test_unanchored_board_discovery_denied.py' -v
