@@ -56,6 +56,19 @@ The 10 upstream Actions workflows were relocated outside active workflow paths
 to [docs/upstream-github-workflows](docs/upstream-github-workflows), pending review.
 No automatic imported workflow is enabled.
 
+### Upstream release lookup privacy (source-level)
+
+The inherited instance-registration command originally queried the Plane GitHub
+release API even when instance metrics telemetry was disabled. The current
+source performs **no such release lookup by default**, retaining the locally
+detected version. A server administrator can explicitly opt in **only** by
+setting `GOREECLOUD_ALLOW_UPSTREAM_RELEASE_CHECK=1`. This sends an HTTP request
+to the **upstream Plane** release feed, not a GoreeCloud update service.
+
+This flag is separate from telemetry consent; it does not block any other
+application egress, and installation/runtime acceptance remains outstanding.
+See [upstream release privacy review](docs/UPSTREAM-RELEASE-LOOKUP-PRIVACY-REVIEW.md).
+
 ## Next implementation milestones
 
 1. Review license/asset rights, dependencies, vulnerabilities and automation.
