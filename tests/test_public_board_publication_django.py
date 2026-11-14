@@ -1,12 +1,14 @@
 # Copyright (c) 2026 GoreeCloud
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Synthetic Django/DRF exercise of four actual anonymous Space view methods.
+"""Synthetic Django/DRF exercise of anonymous Space view methods.
 
-The model classes and database are disposable SQLite stand-ins; this does not
-import Plane's application or prove PostgreSQL/production tenant isolation.
+The model classes are disposable stand-ins on SQLite by default or a separate,
+explicitly selected CI-only PostgreSQL fixture. This does not import Plane's
+application or prove full production tenant isolation.
 """
 import ast
 import importlib.util
+import os
 from pathlib import Path
 import unittest
 from uuid import uuid4
@@ -23,10 +25,28 @@ class AnonymousPublicationQueryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from django.conf import settings
+        # Never accept a caller-supplied DATABASE_URL or production DB target.
+        # CI uses disposable fixed credentials against an ephemeral local-only
+        # PostgreSQL service; outside that explicit mode use in-memory SQLite.
+        backend = os.environ.get("GC_PUBLIC_BOARD_BACKEND", "sqlite")
+        if backend not in ("sqlite", "postgres"):
+            raise AssertionError("Unsupported synthetic public-board test backend")
+        database = (
+            {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": "gc_public_board_test",
+                "USER": "gc_public_board_test",
+                "PASSWORD": "synthetic-public-board-test-only",
+                "HOST": "127.0.0.1",
+                "PORT": "5432",
+                "CONN_MAX_AGE": 0,
+            } if backend == "postgres" else
+            {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
+        )
         if not settings.configured:
             settings.configure(
                 INSTALLED_APPS=[],
-                DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}},
+                DATABASES={"default": database},
                 DEFAULT_AUTO_FIELD="django.db.models.AutoField",
                 SECRET_KEY="synthetic-public-board-only",
                 USE_TZ=True,
@@ -165,7 +185,7 @@ class AnonymousPublicationQueryTests(unittest.TestCase):
             "Response": Response, "status": status, "AllowAny": AllowAny,
         }
         # Execute only the extracted issue lookup helper against disposable
-        # SQLite model stand-ins. This does not import Plane or migrate PostgreSQL.
+        # synthetic models. This does not import Plane or migrate its database.
         issue_source = SOURCE.parent / "issue.py"
         issue_tree = ast.parse(issue_source.read_text())
         helper = next(n for n in issue_tree.body if isinstance(n, ast.FunctionDef)
@@ -207,6 +227,10 @@ class AnonymousPublicationQueryTests(unittest.TestCase):
             for model in (cls.Label, cls.State, cls.Module, cls.Cycle, cls.ProjectMember,
                           cls.Member, cls.Board, cls.Project, cls.Workspace):
                 editor.delete_model(model)
+
+    def test_runner_backend_cannot_silently_fall_back_to_sqlite(self):
+        expected = os.environ.get("GC_PUBLIC_BOARD_BACKEND", "sqlite")
+        self.assertEqual(self.connection.vendor, "postgresql" if expected == "postgres" else "sqlite")
 
     def tearDown(self):
         for model in (self.Label, self.State, self.Module, self.Cycle):
