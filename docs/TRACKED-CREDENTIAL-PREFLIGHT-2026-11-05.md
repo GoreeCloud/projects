@@ -29,7 +29,15 @@ to high-confidence shapes to avoid silently blocking the Plane import on
 generic variable names and OAuth credential fields.
 
 The source scan skips files larger than 2 MB and files with NUL bytes.
+It **never opens tracked symlink targets** (including a symlink into a file
+outside the checkout); a separate regression rejects tracked symlinks whose
+resolved paths escape the checkout. The imported
+`packages/i18n/locales` symlink is an existing internal link.
 Sensitive filenames are checked independently of content size.
+
+A least-privilege, nonpublishing GitHub Actions workflow runs the bounded
+six-test scan for pull requests and changes pushed to `main`; it checks
+tracked checkout source only and has no application startup or deployment step.
 
 ## Actual verification on November 5, 2026
 
@@ -50,7 +58,7 @@ specific source path.
 No private-key block markers or GitHub PAT-shaped markers were detected
 within the tested text-file and size limits.
 
-The four committed Python `unittest` regressions passed **4/4** in a clean
+The original four Python `unittest` regressions passed **4/4** in a clean
 detached GitHub-source checkout, using Python 3 without third-party packages
 or network access. These results are limited to the stated marker patterns
 and do not prove that all secrets, credentials, runtime values, built
@@ -84,3 +92,12 @@ python3 -m unittest discover -s tests -p 'test_tracked_import_credential_preflig
 
 No production systems, remote services, workflows or secret stores are
 modified by the test.
+
+## November 14, 2026 source hardening
+
+The preflight now has **six** focused cases: the original four plus a
+checkout-relative tracked-symlink boundary and a synthetic regression that
+verifies the scanner skips both internal and external symlink targets.
+A pinned-checkout, read-only CI workflow now runs the tests on pull requests
+and `main`. These additions do not turn a bounded signature scan into a
+complete secret/host audit. Record actual workflow results separately.
