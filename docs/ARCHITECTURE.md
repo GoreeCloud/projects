@@ -32,7 +32,7 @@ All private endpoints require `Authorization: Bearer ...`. No write requests are
 ### Trust boundaries and risks
 
 - **Shared root key**: no user identity, project ACL, per-role authorization, account recovery or token rotation mechanism. Replace with GoreeCloud Identity + project-scoped RBAC before production.
-- **HTTPS**: API deployment is intended for loopback. Configure trusted reverse proxy/TLS before off-host clients; Android production build rejects HTTP, but web/Linux will use explicitly configured URLs and still require operator-side TLS.
+- **HTTPS**: API deployment is intended for loopback. Configure trusted reverse proxy/TLS before off-host clients; Android production builds reject HTTP, Linux rejects non-loopback HTTP, and the web client still requires trustworthy HTTPS hosting and an operator-controlled API origin.
 - **Privacy**: no built-in tracking or telemetry. Contacts/assignees are unverified arbitrary text. GoreeShield policy enforcement is a planned integration, not implemented.
 - **Security**: rate limiting, structured audit, threat detection, secret rotation, resource quotas and integration with Wardveil are pending. Token validation is constant time.
 - **Integration**: Mesh event schemas and webhook signature validation are future contracts, not actual runtime integration.
