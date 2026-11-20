@@ -1,0 +1,75 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: apps/api/requirements-dev.txt
+      - name: Install API dependencies
+        run: python -m pip install -r apps/api/requirements-dev.txt
+      - name: Python compile
+        run: python -m compileall -q apps/api
+      - name: API tests
+        run: python -m pytest -q tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        run: npm ci --prefix apps/web --ignore-scripts --no-audit
+      - name: Web typecheck and build
+        run: npm run build --prefix apps/web
+      - name: Check for obvious committed secrets and ignored data
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^|/)(\.env($|\.)|\.venv|node_modules|data/|dist/|\.gradle|target/|.*\.sqlite3|.*\.keystore|.*\.jks)' | grep -Ev '(^|/)\.env\.example$'; then
+            echo 'Generated or secret-bearing files found in tracked tree.'
+            exit 1
+          fi
+          git diff --check
+  linux:
+    name: linux-native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux native check
+        working-directory: apps/linux
+        run: cargo check --locked
+  android:
+    name: android-native
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 37.1
+        run: yes | sdkmanager 'platforms;android-37.1' 'build-tools;36.0.0' || true
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+      - name: Build debug APK
+        working-directory: apps/android
+        run: gradle :app:assembleDebug --no-daemon

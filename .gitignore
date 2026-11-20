@@ -1,0 +1,21 @@
+# Generated artifacts and local secrets
+.env
+.env.*
+!.env.example
+data/
+*.sqlite3
+*.sqlite3-*
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+apps/web/node_modules/
+apps/web/dist/
+apps/linux/target/
+apps/android/.gradle/
+apps/android/**/build/
+.build-logs/
+*.keystore
+*.jks
+local.properties
+.DS_Store

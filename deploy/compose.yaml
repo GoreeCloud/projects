@@ -1,0 +1,24 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Containerfile
+    restart: unless-stopped
+    environment:
+      PROJECTS_DB_PATH: /srv/app/data/projects.sqlite3
+      PROJECTS_ADMIN_TOKEN: ${PROJECTS_ADMIN_TOKEN:?set a long random token in an external environment file}
+      PROJECTS_CORS_ORIGINS: ${PROJECTS_CORS_ORIGINS:-}
+    volumes:
+      - projects-data:/srv/app/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 100
+volumes:
+  projects-data:
