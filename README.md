@@ -10,8 +10,8 @@ A modern, open-source, **development-stage** project and issue management worksp
 | --- | --- | --- | --- |
 | API | FastAPI, Pydantic, SQLite | Token-guarded project, issue, cycle, comment, search, stats endpoints | Operational security assessment, migration and restore drills, integration tests |
 | Web | React 19, TypeScript, Vite, Lucide | Responsive Kanban and list, create project/issue/cycle, update status/priority/cycle, comments, status filtering and search | Browser accessibility, E2E and multi-viewport testing |
-| Linux | Native Slint 1.14.1, Rust | Project/issue lists and creation, token from environment, worker-thread HTTP | Linux compilation, installed package, actual desktop/runtime validation |
-| Android | Kotlin Multiplatform + Compose Multiplatform shared UI, Material 3 | Native Compose activity: connect, create/list projects and issues | Gradle compilation, debug APK, signed app, device lifecycle validation |
+| Linux | Native Slint 1.14.1, Rust | Project/issue lists and creation, token from environment, worker-thread HTTP | Native compilation succeeded on development laptop; installed package and desktop runtime pending |
+| Android | Kotlin Multiplatform + Compose Multiplatform shared UI, Material 3 | Native Compose activity: connect, create/list projects and issues | Gradle debug APK built on development laptop; signed app and device lifecycle pending |
 | Self-hosting | Python slim image, Compose | Nonroot API Containerfile; loopback-bound Compose deployment recipe | Real deployment, backup/restore, reverse proxy TLS |
 
 There is **no account management, role-based authorization, workspace membership, file upload, realtime sync, webhook delivery, notifications, timeline, Gantt chart, dependency graph, offline writes, import/export, or automation yet**. No browser session cookie or token persistence exists. The API uses a **single high-entropy shared administrator bearer token**; it is inappropriate for untrusted multi-user production use. The projects/assignee model does not grant user accounts or access controls.
@@ -62,13 +62,13 @@ cd apps/linux
 cargo run
 ~~~
 
-Keep `PROJECTS_ADMIN_TOKEN` out of shell history. The client only connects to a server explicitly configured by the operator; it does not perform unattended background activity. No Linux package/signature or automatic updater exists.
+Keep `PROJECTS_ADMIN_TOKEN` out of shell history. The client rejects remote plain HTTP and credential-bearing URLs; HTTPS or local loopback HTTP is permitted. It does not perform unattended background activity. No Linux package/signature or automatic updater exists.
 
 ## Native Android client
 
 Open `apps/android` in Android Studio or build with a compatible Gradle 9.x and Android SDK 37.1/AGP 9.2.0. The app uses Kotlin Multiplatform shared UI and Android Material 3 host UI with initial alpha GoreeCloud UI semantic palette. Production builds require HTTPS. Debug builds allow emulator-loopback HTTP only from the app's network client logic. The token is kept in process memory.
 
-A future hardened integration should use the separately versioned `GoreeCloud/gc-ui` Compose Multiplatform and Material 3 Expressive source adapters after dependency and API compatibility checks. The current app does **not** claim a compiled GC UI adapter dependency, full Material 3 Expressive adoption, or completed device acceptance. No signed/installable APK is promised by the repository.
+A future hardened integration should use the separately versioned `GoreeCloud/gc-ui` Compose Multiplatform and Material 3 Expressive source adapters after dependency and API compatibility checks. The current app does **not** claim a compiled GC UI adapter dependency, full Material 3 Expressive adoption, or completed device acceptance. A local unsigned-for-release debug APK was built for development; it is not an accepted signed release or physical-device validation.
 
 ## Container deployment (local preview only)
 

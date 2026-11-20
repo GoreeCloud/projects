@@ -101,14 +101,27 @@ struct Issue {
     title: String,
     status: String,
 }
+fn validate_server(base: &str) -> Result<String, String> {
+    let parsed = url::Url::parse(base).map_err(|_| "Invalid server URL".to_string())?;
+    let localhost = matches!(parsed.host_str(), Some("localhost" | "127.0.0.1"));
+    if parsed.scheme() != "https" && !(parsed.scheme() == "http" && localhost) {
+        return Err("Use HTTPS or HTTP on localhost only".to_string());
+    }
+    if parsed.username() != "" || parsed.password().is_some() || parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err("Server URL cannot contain credentials, query or fragment".to_string());
+    }
+    Ok(parsed.as_str().trim_end_matches('/').to_string())
+}
 fn call_get<T: serde::de::DeserializeOwned>(base: &str, path: &str, token: &str) -> Result<T, String> {
-    let response = ureq::get(&format!("{}{}", base.trim_end_matches('/'), path))
+    let base = validate_server(base)?;
+    let response = ureq::get(&format!("{base}{path}"))
         .set("Authorization", &format!("Bearer {token}"))
         .timeout(Duration::from_secs(8)).call().map_err(|e| e.to_string())?;
     response.into_json().map_err(|e| e.to_string())
 }
 fn call_post(base: &str, path: &str, token: &str, body: serde_json::Value) -> Result<(), String> {
-    ureq::post(&format!("{}{}", base.trim_end_matches('/'), path))
+    let base = validate_server(base)?;
+    ureq::post(&format!("{base}{path}"))
         .set("Authorization", &format!("Bearer {token}"))
         .timeout(Duration::from_secs(8)).send_json(body)
         .map_err(|e| e.to_string())?;
@@ -229,4 +242,22 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
     ui.run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_server;
+    #[test]
+    fn rejects_unsafe_remote_transport() {
+        assert!(validate_server("http://example.com:8000").is_err());
+        assert!(validate_server("ftp://example.com").is_err());
+        assert!(validate_server("https://user:secret@example.com").is_err());
+        assert!(validate_server("https://example.com/?token=secret").is_err());
+    }
+    #[test]
+    fn allows_secure_and_loopback_transport() {
+        assert_eq!(validate_server("https://example.com/").unwrap(), "https://example.com");
+        assert_eq!(validate_server("http://127.0.0.1:8000").unwrap(), "http://127.0.0.1:8000");
+        assert_eq!(validate_server("http://localhost:8000/").unwrap(), "http://localhost:8000");
+    }
 }

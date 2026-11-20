@@ -7,8 +7,10 @@ Acceptance:
 - [x] FastAPI storage/auth and multi-step endpoint tests authored.
 - [x] React UI with board/list, status updates, comments and cycles authored.
 - [x] GPLv3-only LICENSE and principal dependency notices prepared.
-- [ ] Linux compile, package, screenshot and native runtime verification.
-- [ ] Android compiled debug APK, UI/device test and signed release.
+- [x] Native Linux source passed Rust compilation on the authorized development laptop.
+- [ ] Linux package, screenshot and native runtime verification.
+- [x] Android debug APK assembled on the authorized development laptop.
+- [ ] Android UI/device test and signed release.
 - [ ] Build provenance, SBOM and full third-party license inventory.
 - [ ] GitHub protection and CI verified.
 - [ ] UX accessibility/keyboard/full viewport and error/loading acceptance.
